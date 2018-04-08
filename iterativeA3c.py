@@ -39,14 +39,18 @@ def iterativeA3c(nb_ghosts=3,nb_training=1,display_mode='graphics'):
     while nb_it<100 or abs(consec_wins)<50:
 
       for i in range(nb_ghosts+1):
-        agents[i].startLearning()
-        games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30)
-        #compute how many consecutive win ghosts or pacman have
-        for game in games:
-          if game.state.isWin():
-            consec_wins = max(1,consec_wins+1)
-          else:
-            consec_wins = min(-1,consec_wins-1)
-        agents[i].learnFromPast()
-        agents[i].stopLearning()
-        nb_it += 1
+          for j in range(10):
+              agents[i].startLearning()
+              if j != 9:
+                games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30,numTraining=nb_training)
+              else:
+                games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30)
+              #compute how many consecutive win ghosts or pacman have
+              for game in games:
+                if game.state.isWin():
+                  consec_wins = max(1,consec_wins+1)
+                else:
+                  consec_wins = min(-1,consec_wins-1)
+              agents[i].learnFromPast()
+              agents[i].stopLearning()
+      nb_it += 1
