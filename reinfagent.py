@@ -91,7 +91,7 @@ class ReinfAgent(GhostAgent,Agent):
             else:
                 #pacman reward
                 reward = -1 + 1000 * state.isWin() - \
-                        100000 * state.isLose() + abs(state.getNumFood()-self.prev[0].getNumFood()) * 51 + \
+                        100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             self.one_step_transistion.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
