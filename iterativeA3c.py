@@ -39,7 +39,10 @@ def iterativeA3c(nb_ghosts=3,nb_training=10,display_mode='graphics',round_traini
 
         for i in range(nb_ghosts+1):
             for j in range(round_training+1):
-                sys.stdout.write("\r                       {}/{}       ".format(j+1,round_training))
+                if j != round_training:
+                    sys.stdout.write("\r                       {}/{}       ".format(j+1,round_training))
+                else:
+                    sys.stdout.write("\r                       Final result       ")
                 sys.stdout.flush()
                 agents[i].startLearning()
                 if j != round_training:
