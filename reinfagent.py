@@ -10,7 +10,6 @@ from game import Actions
 
 from ghostAgents import GhostAgent
 
-
 import util
 from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import ExtraTreesRegressor
@@ -29,6 +28,7 @@ class ReinfAgent(GhostAgent,Agent):
         self.learn = False
         self.epsilon = epsilon
         self.prev = None
+        self.one_step_transistions = []
 
     def getDistribution(self, state):
         # ghost function
@@ -61,14 +61,14 @@ class ReinfAgent(GhostAgent,Agent):
 
     def startLearning(self):
         self.learn = True
-        self.one_step_transistion = []
+        self.one_step_transistions = []
 
     def stopLearning(self):
         self.learn = False
 
     def learnFromPast(self):
-        if len(self.one_step_transistion):
-            self.learning_algo = computeFittedQIteration(self.one_step_transistion,N=60)
+        if len(self.one_step_transistions):
+            self.learning_algo = computeFittedQIteration(self.one_step_transistions,N=60)
 #            if self.learning_algo is None:
 ##              self.learning_algo = MLPRegressor()
 #              #TODO: faire l'algo...
@@ -94,7 +94,7 @@ class ReinfAgent(GhostAgent,Agent):
                         100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
-            self.one_step_transistion.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
+            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
 
         if not final:
           move = Actions.directionToVector(move)
