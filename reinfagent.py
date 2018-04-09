@@ -97,10 +97,10 @@ class ReinfAgent(GhostAgent,Agent):
             self.one_step_transistion.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
 
         if not final:
-
           move = Actions.directionToVector(move)
           self.prev = (state.deepCopy(),move,state_data)
-
+        else:
+          self.prev = None
 
 
 
