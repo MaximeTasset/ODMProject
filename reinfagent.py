@@ -28,6 +28,7 @@ class ReinfAgent(GhostAgent,Agent):
         self.learning_algo = None
         self.learn = False
         self.epsilon = epsilon
+        self.prev = None
 
     def getDistribution(self, state):
         # ghost function
@@ -48,6 +49,8 @@ class ReinfAgent(GhostAgent,Agent):
         #if we don't have learn yet, make random move + epsilon greedy
         if self.learning_algo is None or np.random.uniform() <= self.epsilon:
             move = legalActions[np.random.randint(0,len(legalActions))]
+            if Actions.directionToVector(move) == (0,0):
+                move = legalActions[np.random.randint(0,len(legalActions))]
         else:
             move = legalActions[np.argmax(self.learning_algo.predict(np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
 
@@ -65,32 +68,39 @@ class ReinfAgent(GhostAgent,Agent):
 
     def learnFromPast(self):
         if len(self.one_step_transistion):
-            self.learning_algo = computeFittedQIteration(self.one_step_transistion,N=10)
+            self.learning_algo = computeFittedQIteration(self.one_step_transistion,N=60)
 #            if self.learning_algo is None:
 ##              self.learning_algo = MLPRegressor()
 #              #TODO: faire l'algo...
 #              pass
 
+    def final(self,final_state):
+      self._saveOneStepTransistion(final_state,None,True)
 
-    def _saveOneStepTransistion(self,state,move):
-
-        nextState = state.generateSuccessor(self.index,move)
-        possibleMove = list(map(Actions.directionToVector,nextState.getLegalActions(self.index)))
-        if self.index:
-            #ghost reward
-            reward = -util.manhattanDistance(nextState.getGhostPosition(self.index),
-                                          nextState.getPacmanPosition()) - \
-                     1000 * nextState.isWin() + 10000 * nextState.isLose()
-        else:
-            #pacman reward
-            reward = -1 + 1000 * nextState.isWin() - \
-                    100000 * nextState.isLose() + abs(state.getNumFood()-nextState.getNumFood()) * 51 + \
-                    (nextState.getPacmanPosition() in state.getCapsules()) * 101
-
+    def _saveOneStepTransistion(self,state,move,final=False):
         state_data = getDataState(state)
-        nextState_data = getDataState(nextState)
-        move = Actions.directionToVector(move)
-        self.one_step_transistion.append((state_data,move,reward,nextState_data,possibleMove))
+        if not self.prev is None:
+
+            possibleMove = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
+
+            if self.index:
+                #ghost reward
+                reward = -util.manhattanDistance(state.getGhostPosition(self.index),
+                                              state.getPacmanPosition()) - \
+                         1000 * state.isWin() + 10000 * state.isLose()
+            else:
+                #pacman reward
+                reward = -1 + 1000 * state.isWin() - \
+                        100000 * state.isLose() + abs(state.getNumFood()-self.prev[0].getNumFood()) * 51 + \
+                        (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
+
+            self.one_step_transistion.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
+
+        if not final:
+
+          move = Actions.directionToVector(move)
+          self.prev = (state.deepCopy(),move,state_data)
+
 
 
 

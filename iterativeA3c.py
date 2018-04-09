@@ -7,9 +7,9 @@ Created on Fri Apr  6 17:38:41 2018
 import pacman
 from reinfagent import ReinfAgent
 import layout
+import sys
 
-
-def iterativeA3c(nb_ghosts=3,nb_training=1,display_mode='graphics'):
+def iterativeA3c(nb_ghosts=3,nb_training=5,display_mode='graphics',round_training=5):
 
     # Choose a display format
     if display_mode == 'quiet':
@@ -34,23 +34,25 @@ def iterativeA3c(nb_ghosts=3,nb_training=1,display_mode='graphics'):
 
     nb_it = 0
     consec_wins = 0
-    winner = 0
 
     while nb_it<100 or abs(consec_wins)<50:
 
       for i in range(nb_ghosts+1):
-          for j in range(10):
+          for j in range(round_training):
+              sys.stdout.write("\r                       {}/{}       ".format(j+1,round_training))
+              sys.stdout.flush()
               agents[i].startLearning()
-              if j != 9:
+              if j != round_training-1:
                 games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30,numTraining=nb_training)
+                for game in games:
+                  if game.state.isWin():
+                    consec_wins = max(1,consec_wins+1)
+                  else:
+                    consec_wins = min(-1,consec_wins-1)
               else:
                 games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30)
               #compute how many consecutive win ghosts or pacman have
-              for game in games:
-                if game.state.isWin():
-                  consec_wins = max(1,consec_wins+1)
-                else:
-                  consec_wins = min(-1,consec_wins-1)
+
               agents[i].learnFromPast()
               agents[i].stopLearning()
       nb_it += 1
