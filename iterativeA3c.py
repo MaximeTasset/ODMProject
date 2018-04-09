@@ -37,22 +37,25 @@ def iterativeA3c(nb_ghosts=3,nb_training=10,display_mode='graphics',round_traini
 
     while nb_it<100 or abs(consec_wins)<50:
 
-      for i in range(nb_ghosts+1):
-          for j in range(round_training+1):
-              sys.stdout.write("\r                       {}/{}       ".format(j+1,round_training))
-              sys.stdout.flush()
-              agents[i].startLearning()
-              if j != round_training:
-                games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30,numTraining=nb_training)
-                for game in games:
-                  if game.state.isWin():
-                    consec_wins = max(1,consec_wins+1)
-                  else:
-                    consec_wins = min(-1,consec_wins-1)
-              else:
-                games = pacman.runGames(layout_instance,agents[0],agents[1:],display,1,False,timeout=30)
-              #compute how many consecutive win ghosts or pacman have
+        for i in range(nb_ghosts+1):
+            for j in range(round_training+1):
+                sys.stdout.write("\r                       {}/{}       ".format(j+1,round_training))
+                sys.stdout.flush()
+                agents[i].startLearning()
+                if j != round_training:
+                    games = pacman.runGames(layout_instance,agents[0],agents[1:],display,nb_training,False,timeout=30,numTraining=nb_training)
+                    #compute how many consecutive win ghosts or pacman have
+                    for game in games:
+                        if game.state.isWin():
+                            consec_wins = max(1,consec_wins+1)
+                        else:
+                            consec_wins = min(-1,consec_wins-1)
+                else:
+                    games = pacman.runGames(layout_instance,agents[0],agents[1:],display,1,False,timeout=30)
 
-              agents[i].learnFromPast()
-              agents[i].stopLearning()
-      nb_it += 1
+                agents[i].learnFromPast()
+                agents[i].stopLearning()
+        nb_it += 1
+
+
+    return agents
