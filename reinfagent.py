@@ -147,8 +147,8 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
 
       #one big call is much faster than multiple small ones.
       Qn_1 = QN_it.predict(topredict)
-
-      QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if r == 0 else r) for (s0,a0,r,s1,_) in samples])
+      #The recursion is used only when not in a terminal state
+      QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if abs(r) < 1000 else r) for (s0,a0,r,s1,_) in samples])
 
 
       QN_it.fit(QnLSX,QnLSY)
