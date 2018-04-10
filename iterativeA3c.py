@@ -76,6 +76,9 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',round_traini
                     pool.map(runGames,args)
                     for k in range(1,num_parallel):
                         main_agents[i].one_step_transistions.extend(parallel_agents[k][i].one_step_transistions)
+                    main_agents[i].learnFromPast(used_core)
+                    for k in range(1,num_parallel):
+                        parallel_agents[k][i].learning_algo = deepcopy(main_agents[i].learning_algo)
                 else:
                     games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
                      #compute how many consecutive win ghosts or pacman have
@@ -85,9 +88,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',round_traini
                         else:
                             consec_wins = min(-1,consec_wins-1)
 
-                main_agents[i].learnFromPast(used_core)
-                for k in range(1,num_parallel):
-                    parallel_agents[k][i].learning_algo = deepcopy(main_agents[i].learning_algo)
+
                 for agents in parallel_agents:
                   agents[i].stopLearning()
 
