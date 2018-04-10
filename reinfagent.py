@@ -66,9 +66,9 @@ class ReinfAgent(GhostAgent,Agent):
     def stopLearning(self):
         self.learn = False
 
-    def learnFromPast(self):
+    def learnFromPast(self,used_core=-1):
         if len(self.one_step_transistions):
-            self.learning_algo = computeFittedQIteration(self.one_step_transistions,N=60)
+            self.learning_algo = computeFittedQIteration(self.one_step_transistions,N=60,mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
 #            if self.learning_algo is None:
 ##              self.learning_algo = MLPRegressor()
 #              #TODO: faire l'algo...
