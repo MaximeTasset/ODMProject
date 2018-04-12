@@ -2,7 +2,7 @@
 """
 Created on Fri Apr  6 17:38:41 2018
 
-@author: Sarah
+@author: Sarah and Maxime
 """
 import pacman
 from reinfagent import ReinfAgent

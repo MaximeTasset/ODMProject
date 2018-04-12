@@ -2,7 +2,7 @@
 """
 Created on Fri Apr  6 17:12:23 2018
 
-@author: Sarah
+@author: Sarah and Maxime
 """
 from pacman import Directions
 from game import Agent
