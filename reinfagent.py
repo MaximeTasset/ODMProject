@@ -31,7 +31,7 @@ class ReinfAgent(GhostAgent,Agent):
         self.one_step_transistions = []
 
     def getDistribution(self, state):
-        # ghost function
+        # Ghost function
 
         dist = util.Counter()
         legalActions = state.getLegalActions(self.index)
@@ -42,17 +42,19 @@ class ReinfAgent(GhostAgent,Agent):
         return dist
 
     def getAction(self, state):
-        # pacman function
+        # Pacman function
 
         legalActions = state.getLegalActions(self.index)
 
-        #if we don't have learn yet, make random move + epsilon greedy
+        # If we don't have learn yet, make random move + epsilon greedy
         if self.learning_algo is None or np.random.uniform() <= self.epsilon:
             move = legalActions[np.random.randint(0,len(legalActions))]
             if Actions.directionToVector(move) == (0,0):
                 move = legalActions[np.random.randint(0,len(legalActions))]
         else:
-            move = legalActions[np.argmax(self.learning_algo.predict(np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
+            move = legalActions[np.argmax(
+                    self.learning_algo.predict(
+                            np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
 
         if self.learn:
             self._saveOneStepTransistion(state,move)
@@ -68,11 +70,9 @@ class ReinfAgent(GhostAgent,Agent):
 
     def learnFromPast(self,used_core=-1):
         if len(self.one_step_transistions):
-            self.learning_algo = computeFittedQIteration(self.one_step_transistions,N=60,mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
-#            if self.learning_algo is None:
-##              self.learning_algo = MLPRegressor()
-#              #TODO: faire l'algo...
-#              pass
+            self.learning_algo = computeFittedQIteration(self.one_step_transistions,
+                                                         N=60,
+                                                         mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
 
     def final(self,final_state):
       self._saveOneStepTransistion(final_state,None,True)
@@ -109,26 +109,22 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
     " samples = [(state0,action0,reward0,state1,possibleMoveFromState1),...,(stateN,actionN,rewardN,stateN+1,possibleMoveFromStateN+1)]
     " convergenceTestSet, None = no test set => return None
     "
-    "Return: an trained instance of mlAlgo
+    " Return: an trained instance of mlAlgo
     "
     " Note: this function assumes that an option like 'warm_start' is set to False or that a call to the fit function reset the model.
 
     """
-#    print(samples[0])
-
-#    samples = [(tuple(state0),action0,reward0,tuple(state1),actionSpace) for (state0,action0,reward0,state1,actionSpace) in samples]
-
     QnLSX = np.array([(s + a) for (s,a,_,_,_) in samples])
     QnLSY = np.array([r for (_,_,r,_,_) in samples])
 
 
     QN_it = clone(mlAlgo)
 
-    #n=1
+    # N=1
     QN_it.fit(QnLSX,QnLSY)
 
 
-    #creation of the array that will be used for predictions
+    # Creation of the array that will be used for predictions
     i = 0
     topredict = []
     index = {}
@@ -142,12 +138,12 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
     topredict = np.array(topredict)
 
     for n in range(0,N-1):
-      sys.stdout.write("\r{}/{}       ".format(n+2,N))
+      sys.stdout.write("\r{}/{}  ".format(n+2,N))
       sys.stdout.flush()
 
-      #one big call is much faster than multiple small ones.
+      # One big call is much faster than multiple small ones.
       Qn_1 = QN_it.predict(topredict)
-      #The recursion is used only when not in a terminal state
+      # The recursion is used only when not in a terminal state
       QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if abs(r) < 1000 else r) for (s0,a0,r,s1,_) in samples])
 
 
@@ -163,6 +159,12 @@ def convertGridToNpArray(grid):
     return array
 
 def getDataState(state):
+    """
+    " Returns a tuple whose first elements are the positions of all the agents,
+    " and whose other elements contain the flattened food grid.
+    """
     #,state.getCapsules().copy()
 
-    return tuple(np.array([st.getPosition() for st in state.data.agentStates]).flatten().tolist() + convertGridToNpArray(state.getFood()).flatten().tolist())
+    return tuple(np.array(
+            [st.getPosition() for st in state.data.agentStates]).flatten().tolist() \
+            + convertGridToNpArray(state.getFood()).flatten().tolist())
