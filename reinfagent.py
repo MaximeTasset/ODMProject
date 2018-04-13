@@ -16,10 +16,11 @@ from sklearn.ensemble import ExtraTreesRegressor
 import numpy as np
 from sklearn.base import clone
 import sys
+import tensorflow as tf
 
 class ReinfAgent(GhostAgent,Agent):
 
-    def __init__(self, index=0,epsilon=0.1):
+    def __init__(self, index=0,epsilon=0.1, optim=None):
 
         self.lastMove = Directions.STOP
         self.index = index
@@ -29,6 +30,20 @@ class ReinfAgent(GhostAgent,Agent):
         self.epsilon = epsilon
         self.prev = None
         self.one_step_transistions = []
+        self.opt = tf.train.AdamOptimizer()
+        
+        self.name = "worker_" + str(index)       
+        self.optim = optim
+        self.global_episodes = global_episodes
+        self.increment = self.global_episodes.assign_add(1)
+        self.episode_rewards = []
+        self.episode_lengths = []
+        self.episode_mean_values = []
+        self.summary_writer = tf.summary.FileWriter("train_"+str(self.number))
+
+        #Create the local copy of the network and the tensorflow op to copy global paramters to local network
+        self.local_AC = AC_Network(s_size,a_size,self.name,trainer)
+        self.update_local_ops = update_target_graph('global',self.name)
 
     def getDistribution(self, state):
         # Ghost function
@@ -91,8 +106,8 @@ class ReinfAgent(GhostAgent,Agent):
             else:
                 #pacman reward
                 reward = -1 + 1000 * state.isWin() - \
-                        100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51 + \
-                        (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
+                        100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
+                        #(state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
 
