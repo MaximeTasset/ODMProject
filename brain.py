@@ -16,6 +16,17 @@ from random import choice
 from time import sleep
 from time import time
 
+# Copies one set of variables to another.
+# Used to set worker network parameters to those of global network.
+def update_target_graph(from_scope,to_scope):
+    from_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, from_scope)
+    to_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, to_scope)
+
+    op_holder = []
+    for from_var,to_var in zip(from_vars,to_vars):
+        op_holder.append(to_var.assign(from_var))
+    return op_holder
+
 #Used to initialize weights for policy and value output layers
 def normalized_columns_initializer(std=1.0):
     def _initializer(shape, dtype=None, partition_info=None):
@@ -26,6 +37,8 @@ def normalized_columns_initializer(std=1.0):
 
 class AC_Network():
     def __init__(self,s_size,a_size,scope,trainer,global_scope='global'):
+        print(s_size,a_size,scope,trainer,global_scope)
+
         with tf.variable_scope(scope):
             #Input and hidden layers
             self.inputs = tf.placeholder(shape=[None,s_size],dtype=tf.float32)

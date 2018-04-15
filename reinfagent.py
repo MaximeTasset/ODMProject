@@ -10,6 +10,8 @@ from game import Actions
 
 from ghostAgents import GhostAgent
 
+from brain import *
+
 import util
 from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import ExtraTreesRegressor
@@ -18,9 +20,11 @@ from sklearn.base import clone
 import sys
 import tensorflow as tf
 
+from multiprocessing import RLock
+
 class ReinfAgent(GhostAgent,Agent):
 
-    def __init__(self, index=0,epsilon=0.1, optim=None):
+    def __init__(self,optim, global_episodes, index=0,name="worker",global_scope='global',epsilon=0.1):
 
         self.lastMove = Directions.STOP
         self.index = index
@@ -31,19 +35,19 @@ class ReinfAgent(GhostAgent,Agent):
         self.prev = None
         self.one_step_transistions = []
         self.opt = tf.train.AdamOptimizer()
-        
-        self.name = "worker_" + str(index)       
+
+        self.name = name
+        self.global_scope = global_scope
+
         self.optim = optim
         self.global_episodes = global_episodes
         self.increment = self.global_episodes.assign_add(1)
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
-        self.summary_writer = tf.summary.FileWriter("train_"+str(self.number))
-
-        #Create the local copy of the network and the tensorflow op to copy global paramters to local network
-        self.local_AC = AC_Network(s_size,a_size,self.name,trainer)
-        self.update_local_ops = update_target_graph('global',self.name)
+        self.summary_writer = tf.summary.FileWriter("train_"+str(self.index))
+        self.lock =RLock()
+        self.first = True
 
     def getDistribution(self, state):
         # Ghost function
@@ -63,6 +67,21 @@ class ReinfAgent(GhostAgent,Agent):
 
         # If we don't have learn yet, make random move + epsilon greedy
         if self.learning_algo is None or np.random.uniform() <= self.epsilon:
+            #Create the local copy of the network and the tensorflow op to copy global paramters to local network
+            with self.lock:
+                if self.learning_algo is None and self.first and self.learn:
+                    self.first = False
+                    if self.index:
+                      a_size = 4
+                    else:
+                      #pacman has the stop move
+                      a_size = 5
+                    s_size = len(getDataState(state))
+
+                    self.local_AC = AC_Network(s_size,a_size,self.name,self.optim,global_scope=self.global_scope)
+                    self.update_local_ops = update_target_graph(self.global_scope,self.name)
+
+
             move = legalActions[np.random.randint(0,len(legalActions))]
             if Actions.directionToVector(move) == (0,0):
                 move = legalActions[np.random.randint(0,len(legalActions))]

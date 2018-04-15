@@ -5,8 +5,12 @@ Created on Fri Apr  6 17:38:41 2018
 @author: Sarah and Maxime
 """
 import pacman
-from reinfagent import ReinfAgent
+from reinfagent import ReinfAgent,getDataState
 import layout
+
+import tensorflow as tf
+from brain import *
+
 import sys
 from copy import deepcopy
 from multiprocessing.pool import ThreadPool
@@ -17,7 +21,7 @@ def runGames(kargs):
     return pacman.runGames(**kargs)
 
 def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
-                 round_training=5,num_parallel=4,nb_cores=-1):
+                 round_training=5,num_parallel=1,nb_cores=-1):
 
     pool = ThreadPool(num_parallel)
 #    pool = Pool(num_parallel)
@@ -35,11 +39,17 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
         display = graphicsDisplay.PacmanGraphics(1.0, frameTime=0.1)
 
 
-    parallel_agents = [[ReinfAgent(i) for i in range(0,nb_ghosts+1)] for _ in range(num_parallel)]
-    main_agents = parallel_agents[0]
-
-
     layout_instance = layout.getLayout('mediumClassic')
+
+    initState = pacman.GameState()
+    initState.initialize(layout_instance, nb_ghosts)
+    s_size = len(getDataState(initState))
+
+    master_networks = [AC_Network(s_size,4 if i else 5,"global_"+str(i),None,global_scope="global_"+str(i))  for i in range(0,nb_ghosts+1)]# Generate global network
+    global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False)  for i in range(0,nb_ghosts+1)]
+    optims = [tf.train.AdamOptimizer(learning_rate=1e-4) for i in range(0,nb_ghosts+1)]
+    parallel_agents = [[ReinfAgent(optim=optims[i],global_episodes=global_episodes[i],index=i,name="worker_{}_{}".format(i,j),global_scope="global_"+str(i)) for i in range(0,nb_ghosts+1)] for j in range(num_parallel)]
+    main_agents = parallel_agents[0]
 
     args = [{"layout":layout_instance,
              "pacman":parallel_agents[i][0],
@@ -57,11 +67,11 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
 
         for i in range(nb_ghosts+1):
             for j in range(round_training+1):
-                if j != round_training:
-                    sys.stdout.write("\r           {}/{}       ".format(j+1,round_training))
-                else:
-                    sys.stdout.write("\r           Final result       ")
-                sys.stdout.flush()
+#                if j != round_training:
+#                    sys.stdout.write("\r           {}/{}       ".format(j+1,round_training))
+#                else:
+#                    sys.stdout.write("\r           Final result       ")
+#                sys.stdout.flush()
                 for agents in parallel_agents:
                   agents[i].startLearning()
 
@@ -88,10 +98,10 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
         nb_it += 1
 
 
-    return main_agents
+    return master_networks
 
 if __name__ is "__main__":
   iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
-               round_training=5,num_parallel=max(1,psutil.cpu_count()),
+               round_training=5,num_parallel=1,
                nb_cores=max(1,psutil.cpu_count()-1))
-  
+#  max(1,psutil.cpu_count())
