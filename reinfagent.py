@@ -24,7 +24,7 @@ from multiprocessing import RLock
 
 class ReinfAgent(GhostAgent,Agent):
 
-    def __init__(self,optim, global_episodes, index=0,name="worker",global_scope='global',epsilon=0.1):
+    def __init__(self,optim, global_episodes,s_size,a_size, index=0,name="worker",global_scope='global',epsilon=0.1):
 
         self.lastMove = Directions.STOP
         self.index = index
@@ -47,7 +47,8 @@ class ReinfAgent(GhostAgent,Agent):
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter("train_"+str(self.index))
         self.lock =RLock()
-        self.first = True
+        self.local_AC = AC_Network(s_size,a_size,self.name,self.optim,global_scope=self.global_scope)
+        self.update_local_ops = update_target_graph(self.global_scope,self.name)
 
     def getDistribution(self, state):
         # Ghost function
@@ -68,19 +69,6 @@ class ReinfAgent(GhostAgent,Agent):
         # If we don't have learn yet, make random move + epsilon greedy
         if self.learning_algo is None or np.random.uniform() <= self.epsilon:
             #Create the local copy of the network and the tensorflow op to copy global paramters to local network
-            with self.lock:
-                if self.learning_algo is None and self.first and self.learn:
-                    self.first = False
-                    if self.index:
-                      a_size = 4
-                    else:
-                      #pacman has the stop move
-                      a_size = 5
-                    s_size = len(getDataState(state))
-
-                    self.local_AC = AC_Network(s_size,a_size,self.name,self.optim,global_scope=self.global_scope)
-                    self.update_local_ops = update_target_graph(self.global_scope,self.name)
-
 
             move = legalActions[np.random.randint(0,len(legalActions))]
             if Actions.directionToVector(move) == (0,0):

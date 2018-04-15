@@ -48,7 +48,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
     master_networks = [AC_Network(s_size,4 if i else 5,"global_"+str(i),None,global_scope="global_"+str(i))  for i in range(0,nb_ghosts+1)]# Generate global network
     global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False)  for i in range(0,nb_ghosts+1)]
     optims = [tf.train.AdamOptimizer(learning_rate=1e-4) for i in range(0,nb_ghosts+1)]
-    parallel_agents = [[ReinfAgent(optim=optims[i],global_episodes=global_episodes[i],index=i,name="worker_{}_{}".format(i,j),global_scope="global_"+str(i)) for i in range(0,nb_ghosts+1)] for j in range(num_parallel)]
+    parallel_agents = [[ReinfAgent(optims[i],global_episodes[i],s_size,4 if i else 5,index=i,name="worker_{}_{}".format(i,j),global_scope="global_"+str(i)) for i in range(0,nb_ghosts+1)] for j in range(num_parallel)]
     main_agents = parallel_agents[0]
 
     args = [{"layout":layout_instance,
