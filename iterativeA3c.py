@@ -23,6 +23,7 @@ def runGames(kargs):
 def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
                  round_training=5,num_parallel=1,nb_cores=-1):
 
+    tf.reset_default_graph()
     pool = ThreadPool(num_parallel)
 #    pool = Pool(num_parallel)
 
@@ -52,7 +53,9 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
     global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False)  for i in range(0,nb_ghosts+1)]
     optims = [tf.train.AdamOptimizer(learning_rate=1e-4) for i in range(0,nb_ghosts+1)]
 
+
     with tf.Session() as sess:
+
         parallel_agents = [[ReinfAgent(optims[i],global_episodes[i],sess,
                                        s_size,4 if i else 5,index=i,
                                        name="worker_{}_{}".format(i,j),
@@ -60,6 +63,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
                                         for i in range(0,nb_ghosts+1)]
                                         for j in range(num_parallel)]
 
+        sess.run(tf.global_variables_initializer())
         main_agents = parallel_agents[0]
 
         args = [{"layout":layout_instance,

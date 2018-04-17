@@ -19,15 +19,24 @@ import numpy as np
 from sklearn.base import clone
 import sys
 import tensorflow as tf
+import scipy.signal
+
+DIRECTION = { 0 : 'North',
+              1 : 'South',
+              2  :'East',
+              3  :'West',
+              4  : 'Stop'}
+
 
 
 class ReinfAgent(GhostAgent,Agent):
 
     def __init__(self,optim, global_episodes,sess,s_size,a_size, index=0,
-                 name="worker",global_scope='global',epsilon=0.1):
+                 name="worker",global_scope='global',epsilon=0.1,gamma=0.95):
 
         self.lastMove = Directions.STOP
         self.index = index
+        self.gamma = gamma
 
         self.learning_algo = None
         self.learn = False
@@ -50,6 +59,7 @@ class ReinfAgent(GhostAgent,Agent):
         self.local_AC = AC_Network(s_size,a_size,self.name,self.optim,global_scope=self.global_scope)
         self.update_local_ops = update_target_graph(self.global_scope,self.name)
         self.rnn_state = self.local_AC.state_init
+        self.batch_rnn_state = self.rnn_state
 
     def getDistribution(self, state):
         # Ghost function
@@ -85,8 +95,14 @@ class ReinfAgent(GhostAgent,Agent):
                         feed_dict={self.local_AC.inputs:[s],
                         self.local_AC.state_in[0]:self.rnn_state[0],
                         self.local_AC.state_in[1]:self.rnn_state[1]})
+
+
             move = np.random.choice(a_dist[0],p=a_dist[0])
-            move = np.argmax(a_dist == move)
+            move = DIRECTION[np.argmax(a_dist == move)]
+            while not move in legalActions:
+                move = np.random.choice(a_dist[0],p=a_dist[0])
+                move = DIRECTION[np.argmax(a_dist == move)]
+
 
         if self.learn:
             self._saveOneStepTransistion(state,move,False,v[0,0])
@@ -113,7 +129,7 @@ class ReinfAgent(GhostAgent,Agent):
         state_data = getDataState(state)
         if not self.prev is None:
 
-            possibleMove = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
+#            possibleMove = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
 
             if self.index:
                 #ghost reward
@@ -126,7 +142,7 @@ class ReinfAgent(GhostAgent,Agent):
                         100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
                         #(state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
-            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],self.prev[3],possibleMove))
+            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],self.prev[3]))
         if len(self.one_step_transistions) == 30 or final:
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
@@ -136,13 +152,17 @@ class ReinfAgent(GhostAgent,Agent):
             self.one_step_transistions = []
 
         if not final:
-          move = Actions.directionToVector(move)
+          for i,m in DIRECTION.items():
+            if m == move:
+              move = i
+              break
           self.prev = (state.deepCopy(),move,state_data,v)
         else:
           self.prev = None
 
     def train(self,rollout,sess,gamma,bootstrap_value):
         rollout = np.array(rollout)
+        print(rollout)
         observations = rollout[:,0]
         actions = rollout[:,1]
         rewards = rollout[:,2]
@@ -223,6 +243,10 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
       QN_it.fit(QnLSX,QnLSY)
 
     return QN_it
+
+# Discounting function used to calculate discounted returns.
+def discount(x, gamma):
+    return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 def convertGridToNpArray(grid):
     array = np.zeros((grid.width,grid.height))
