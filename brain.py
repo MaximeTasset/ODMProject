@@ -42,9 +42,9 @@ class AC_Network():
         with tf.variable_scope(scope):
             #Input and hidden layers
             self.inputs = tf.placeholder(shape=[None,s_size],dtype=tf.float32)
-            hidden = slim.fully_connected(self.inputs,256,activation_fn=tf.nn.elu)
-            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu)
-            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu)
+            hidden = slim.fully_connected(self.inputs,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
             #Recurrent network for temporal dependencies
             lstm_cell = tf.contrib.rnn.BasicLSTMCell(256,state_is_tuple=True)

@@ -68,7 +68,11 @@ class ReinfAgent(GhostAgent,Agent):
         legalActions = state.getLegalActions(self.index)
         s = getDataState(state)
         # If we don't have learn yet or epsilon greedy, make random move
-        if self.learning_algo is None or np.random.uniform() <= self.epsilon:
+        if np.random.uniform() <= self.epsilon:
+            v = self.sess.run(self.local_AC.value,
+                            feed_dict={self.local_AC.inputs:[s],
+                            self.local_AC.state_in[0]:self.rnn_state[0],
+                            self.local_AC.state_in[1]:self.rnn_state[1]})
             move = legalActions[np.random.randint(0,len(legalActions))]
             if Actions.directionToVector(move) == (0,0):
                 move = legalActions[np.random.randint(0,len(legalActions))]
