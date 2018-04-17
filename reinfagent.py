@@ -74,40 +74,40 @@ class ReinfAgent(GhostAgent,Agent):
 
     def getAction(self, state):
         # Pacman function
+        with self.sess.as_default(), self.sess.graph.as_default():
+            legalActions = state.getLegalActions(self.index)
+            s = getDataState(state)
+            # If we don't have learn yet or epsilon greedy, make random move
+            if np.random.uniform() <= self.epsilon:
+                v = self.sess.run(self.local_AC.value,
+                                feed_dict={self.local_AC.inputs:[s],
+                                self.local_AC.state_in[0]:self.rnn_state[0],
+                                self.local_AC.state_in[1]:self.rnn_state[1]})
+                move = legalActions[np.random.randint(0,len(legalActions))]
+                if Actions.directionToVector(move) == (0,0):
+                    move = legalActions[np.random.randint(0,len(legalActions))]
+            else:
+    #            move = legalActions[np.argmax(
+    #                    self.learning_algo.predict(
+    #                            np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
 
-        legalActions = state.getLegalActions(self.index)
-        s = getDataState(state)
-        # If we don't have learn yet or epsilon greedy, make random move
-        if np.random.uniform() <= self.epsilon:
-            v = self.sess.run(self.local_AC.value,
+                a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
                             feed_dict={self.local_AC.inputs:[s],
                             self.local_AC.state_in[0]:self.rnn_state[0],
                             self.local_AC.state_in[1]:self.rnn_state[1]})
-            move = legalActions[np.random.randint(0,len(legalActions))]
-            if Actions.directionToVector(move) == (0,0):
-                move = legalActions[np.random.randint(0,len(legalActions))]
-        else:
-#            move = legalActions[np.argmax(
-#                    self.learning_algo.predict(
-#                            np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
-
-            a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
-                        feed_dict={self.local_AC.inputs:[s],
-                        self.local_AC.state_in[0]:self.rnn_state[0],
-                        self.local_AC.state_in[1]:self.rnn_state[1]})
 
 
-            move = np.random.choice(a_dist[0],p=a_dist[0])
-            move = DIRECTION[np.argmax(a_dist == move)]
-            while not move in legalActions:
                 move = np.random.choice(a_dist[0],p=a_dist[0])
                 move = DIRECTION[np.argmax(a_dist == move)]
+                while not move in legalActions:
+                    move = np.random.choice(a_dist[0],p=a_dist[0])
+                    move = DIRECTION[np.argmax(a_dist == move)]
 
 
-        if self.learn:
-            self._saveOneStepTransistion(state,move,False,v[0,0])
+            if self.learn:
+                self._saveOneStepTransistion(state,move,False,v[0,0])
 
-        return move
+            return move
 
     def startLearning(self):
         self.learn = True
@@ -142,7 +142,7 @@ class ReinfAgent(GhostAgent,Agent):
                         100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
                         #(state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
-            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],self.prev[3]))
+            self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
         if len(self.one_step_transistions) == 30 or final:
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
@@ -161,8 +161,9 @@ class ReinfAgent(GhostAgent,Agent):
           self.prev = None
 
     def train(self,rollout,sess,gamma,bootstrap_value):
+        if not len(rollout):
+            return
         rollout = np.array(rollout)
-        print(rollout)
         observations = rollout[:,0]
         actions = rollout[:,1]
         rewards = rollout[:,2]
@@ -262,6 +263,6 @@ def getDataState(state):
     """
     #,state.getCapsules().copy()
 
-    return tuple(np.array(
+    return list(np.array(
             [st.getPosition() for st in state.data.agentStates]).flatten().tolist() \
             + convertGridToNpArray(state.getFood()).flatten().tolist())
