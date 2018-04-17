@@ -46,10 +46,11 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
     initState.initialize(layout_instance, nb_ghosts)
     s_size = len(getDataState(initState))
 
+    # Generate global network
     master_networks = [AC_Network(s_size,4 if i else 5,"global_"+str(i),None,
                                   global_scope="global_"+str(i))
-                                    for i in range(0,nb_ghosts+1)]# Generate global network
-    global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False)  for i in range(0,nb_ghosts+1)]
+                                    for i in range(0,nb_ghosts+1)]
+    global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False) for i in range(0,nb_ghosts+1)]
     optims = [tf.train.AdamOptimizer(learning_rate=1e-4) for i in range(0,nb_ghosts+1)]
 
     with tf.Session() as sess:
