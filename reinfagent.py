@@ -20,11 +20,11 @@ from sklearn.base import clone
 import sys
 import tensorflow as tf
 
-from multiprocessing import RLock
 
 class ReinfAgent(GhostAgent,Agent):
 
-    def __init__(self,optim, global_episodes,s_size,a_size, index=0,name="worker",global_scope='global',epsilon=0.1):
+    def __init__(self,optim, global_episodes,sess,s_size,a_size, index=0,
+                 name="worker",global_scope='global',epsilon=0.1):
 
         self.lastMove = Directions.STOP
         self.index = index
@@ -41,14 +41,15 @@ class ReinfAgent(GhostAgent,Agent):
 
         self.optim = optim
         self.global_episodes = global_episodes
+        self.sess = sess
         self.increment = self.global_episodes.assign_add(1)
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter("train_"+str(self.index))
-        self.lock =RLock()
         self.local_AC = AC_Network(s_size,a_size,self.name,self.optim,global_scope=self.global_scope)
         self.update_local_ops = update_target_graph(self.global_scope,self.name)
+        self.rnn_state = self.local_AC.state_init
 
     def getDistribution(self, state):
         # Ghost function
@@ -65,21 +66,26 @@ class ReinfAgent(GhostAgent,Agent):
         # Pacman function
 
         legalActions = state.getLegalActions(self.index)
-
-        # If we don't have learn yet, make random move + epsilon greedy
+        s = getDataState(state)
+        # If we don't have learn yet or epsilon greedy, make random move
         if self.learning_algo is None or np.random.uniform() <= self.epsilon:
-            #Create the local copy of the network and the tensorflow op to copy global paramters to local network
-
             move = legalActions[np.random.randint(0,len(legalActions))]
             if Actions.directionToVector(move) == (0,0):
                 move = legalActions[np.random.randint(0,len(legalActions))]
         else:
-            move = legalActions[np.argmax(
-                    self.learning_algo.predict(
-                            np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
+#            move = legalActions[np.argmax(
+#                    self.learning_algo.predict(
+#                            np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
+
+            a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
+                        feed_dict={self.local_AC.inputs:[s],
+                        self.local_AC.state_in[0]:self.rnn_state[0],
+                        self.local_AC.state_in[1]:self.rnn_state[1]})
+            move = np.random.choice(a_dist[0],p=a_dist[0])
+            move = np.argmax(a_dist == move)
 
         if self.learn:
-            self._saveOneStepTransistion(state,move)
+            self._saveOneStepTransistion(state,move,False,v[0,0])
 
         return move
 
@@ -99,7 +105,7 @@ class ReinfAgent(GhostAgent,Agent):
     def final(self,final_state):
       self._saveOneStepTransistion(final_state,None,True)
 
-    def _saveOneStepTransistion(self,state,move,final=False):
+    def _saveOneStepTransistion(self,state,move,final,v=None):
         state_data = getDataState(state)
         if not self.prev is None:
 
@@ -116,13 +122,54 @@ class ReinfAgent(GhostAgent,Agent):
                         100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
                         #(state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
-            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],possibleMove))
+            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],self.prev[3],possibleMove))
+        if len(self.one_step_transistions) == 30 or final:
+            v1 = self.sess.run(self.local_AC.value,
+                            feed_dict={self.local_AC.inputs:[state_data],
+                            self.local_AC.state_in[0]:self.rnn_state[0],
+                            self.local_AC.state_in[1]:self.rnn_state[1]})[0,0]
+            self.train(self.one_step_transistions,self.sess,self.gamma,v1)
+            self.one_step_transistions = []
 
         if not final:
           move = Actions.directionToVector(move)
-          self.prev = (state.deepCopy(),move,state_data)
+          self.prev = (state.deepCopy(),move,state_data,v)
         else:
           self.prev = None
+
+    def train(self,rollout,sess,gamma,bootstrap_value):
+        rollout = np.array(rollout)
+        observations = rollout[:,0]
+        actions = rollout[:,1]
+        rewards = rollout[:,2]
+        next_observations = rollout[:,3]
+        values = rollout[:,4]
+
+        # Here we take the rewards and values from the rollout, and use them to
+        # generate the advantage and discounted returns.
+        # The advantage function uses "Generalized Advantage Estimation"
+        self.rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
+        discounted_rewards = discount(self.rewards_plus,gamma)[:-1]
+        self.value_plus = np.asarray(values.tolist() + [bootstrap_value])
+        advantages = rewards + gamma * self.value_plus[1:] - self.value_plus[:-1]
+        advantages = discount(advantages,gamma)
+
+        # Update the global network using gradients from loss
+        # Generate network statistics to periodically save
+        feed_dict = {self.local_AC.target_v:discounted_rewards,
+            self.local_AC.inputs:np.vstack(observations),
+            self.local_AC.actions:actions,
+            self.local_AC.advantages:advantages,
+            self.local_AC.state_in[0]:self.batch_rnn_state[0],
+            self.local_AC.state_in[1]:self.batch_rnn_state[1]}
+        v_l,p_l,e_l,g_n,v_n, self.batch_rnn_state,_ = sess.run([self.local_AC.value_loss,
+            self.local_AC.policy_loss,
+            self.local_AC.entropy,
+            self.local_AC.grad_norms,
+            self.local_AC.var_norms,
+            self.local_AC.state_out,
+            self.local_AC.apply_grads],
+            feed_dict=feed_dict)
 
 
 
