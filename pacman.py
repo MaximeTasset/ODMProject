@@ -546,7 +546,7 @@ def readCommand(argv):
         type='int',
         help=default('the number of GAMES to play'),
         metavar='GAMES',
-        default=1)
+        default=5)
     parser.add_option(
         '-l',
         '--layout',

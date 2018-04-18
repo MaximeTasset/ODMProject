@@ -805,10 +805,13 @@ class Game:
                 boinc.set_fraction_done(self.getProgress())
             if not self.gameOver:
                 i += 1
+                sys.stdout.write("\r{}   ".format(i))
+                sys.stdout.flush()
                 if i >= 300:
+                  print("passe")
                   self.state.data._win = False
                   self.state.data._lose = True
-                  self.gameOver = True
+                  break
 
         # inform a learning agent of the game result
         for agentIndex, agent in enumerate(self.agents):

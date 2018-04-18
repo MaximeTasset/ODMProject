@@ -86,7 +86,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
                     agents[i].startLearning()
 
                 for j in range(round_training):
-                    sys.stdout.write("\r           {}/{}       ".format(j+1,round_training))
+                    sys.stdout.write("\r                {}/{}       ".format(j+1,round_training))
                     sys.stdout.flush()
 
                     pool.map(runGames,args)
@@ -113,6 +113,6 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
 
 if __name__ is "__main__":
   iterativeA3c(nb_ghosts=3,nb_training=1,display_mode='graphics',
-               round_training=5,num_parallel=psutil.cpu_count(),
+               round_training=5,num_parallel=1,
                nb_cores=max(1,psutil.cpu_count()-1))
 #  max(1,psutil.cpu_count())

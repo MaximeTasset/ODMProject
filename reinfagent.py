@@ -123,7 +123,8 @@ class ReinfAgent(GhostAgent,Agent):
                                                          mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
 
     def final(self,final_state):
-      self._saveOneStepTransistion(final_state,None,True)
+      with self.sess.as_default(), self.sess.graph.as_default():
+          self._saveOneStepTransistion(final_state,None,True)
 
     def _saveOneStepTransistion(self,state,move,final,v=None):
         state_data = getDataState(state)
