@@ -127,7 +127,7 @@ def make_gif(filename='movie.mp4'):
 
     os.makedirs('videos',exist_ok=True)
 
-    with io.get_writer(filename, mode='I') as writer:
+    with io.get_writer(filename, mode='I',macro_block_size=None) as writer:
         for i in range(nb_frames):
             filename = 'frames/frame_%08d.ps' % i
             image = io.imread(filename)

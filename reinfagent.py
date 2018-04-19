@@ -146,8 +146,8 @@ class ReinfAgent(GhostAgent,Agent):
             else:
                 #pacman reward
                 reward = -1 + 1000 * state.isWin() \
-                        -100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
-                        #(state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
+                        -100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51 + \
+                        (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
         if len(self.one_step_transistions) == 30 or final:
@@ -270,6 +270,32 @@ def getDataState(state):
     """
     #,state.getCapsules().copy()
 
+    agent_pos = [st.getPosition() for st in state.data.agentStates]
+    food_pos = state.getFood()
+    walls_pos = state.getWalls()
+    caps_pos = state.getCapsules()
+    nb_agent = len(agent_pos)
+
+    data = np.zeros((walls_pos.width,walls_pos.height))
+    for i in walls_pos.width:
+        for j in walls_pos.height:
+            if (i,j) in agent_pos:
+                data[i,j] = agent_pos.index((i,j)) + 1
+            elif walls_pos[i,j]:
+                data[i,j] = nb_agent + 1
+            elif food_pos[i,j]:
+                data[i,j] = nb_agent + 2
+            elif (i,j) in caps_pos:
+                data[i,j] = nb_agent + 3
+    return data
+
     return list(np.array([st.getPosition() for st in state.data.agentStates]).flatten().tolist() \
             + convertGridToNpArray(state.getFood()).flatten().tolist() \
             + convertGridToNpArray(state.getWalls()).flatten().tolist())
+
+
+
+
+
+
+
