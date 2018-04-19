@@ -16,11 +16,15 @@ from copy import deepcopy
 from multiprocessing.pool import ThreadPool
 #from multiprocessing import Pool
 import psutil
+import os
+import imageio as io
+
+import graphicsDisplay
 
 def runGames(kargs):
     return pacman.runGames(**kargs)
 
-def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
+def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                  round_training=5,num_parallel=1,nb_cores=-1):
 
     tf.reset_default_graph()
@@ -72,9 +76,9 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
                  "pacman":parallel_agents[i][0],
                  "ghosts":parallel_agents[i][1:],
                  "display":display,
-                 "numGames":nb_training,
+                 "numGames":1,
                  "record":False,
-                 "numTraining":nb_training,
+                 "numTraining":1,
                  "timeout":30} for i in range(num_parallel)]
 
         nb_it = 0
@@ -108,13 +112,30 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
                     else:
                         consec_wins = min(-1,consec_wins-1)
 
+                make_gif('agent_{}_nbrounds_{}.mp4'.format(i,nb_it))
+                graphicsDisplay.FRAME_NUMBER = 0
             nb_it += 1
 
 
     return master_networks
 
+
+def make_gif(filename='movie.mp4'):
+    filename = 'videos/'+filename
+    # The images to use are in subfolder frames of the current folder:
+    nb_frames = len(os.listdir(os.getcwd()+"/frames"))
+
+    os.makedirs('videos',exist_ok=True)
+
+    with io.get_writer(filename, mode='I') as writer:
+        for i in range(nb_frames):
+            filename = 'frames/frame_%08d.ps' % i
+            image = io.imread(filename)
+            writer.append_data(image)
+            os.remove(filename)
+
+
 if __name__ is "__main__":
-  iterativeA3c(nb_ghosts=1,nb_training=10,display_mode='graphics',
-               round_training=5,num_parallel=psutil.cpu_count(),
+  iterativeA3c(nb_ghosts=1,round_training=100,display_mode='graphics',num_parallel=psutil.cpu_count(),
                nb_cores=max(1,psutil.cpu_count()-1))
 #  max(1,psutil.cpu_count())

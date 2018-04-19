@@ -25,8 +25,8 @@ from game import Directions
 # Some code from a Pacman implementation by LiveWires, and used / modified
 # with permission.
 
-DEFAULT_GRID_SIZE = 30.0
-INFO_PANE_HEIGHT = 35
+DEFAULT_GRID_SIZE = 32.0
+INFO_PANE_HEIGHT = 32
 BACKGROUND_COLOR = formatColor(0, 0, 0)
 WALL_COLOR = formatColor(0.0 / 255.0, 51.0 / 255.0, 255.0 / 255.0)
 INFO_PANE_COLOR = formatColor(.4, .4, 0)
@@ -277,6 +277,7 @@ class PacmanGraphics:
         self.infoPane.updateScore(newState.score)
         if 'ghostDistances' in dir(newState):
             self.infoPane.updateGhostDistances(newState.ghostDistances)
+        saveFrame()
 
     def make_window(self, width, height):
         grid_width = (width - 1) * self.gridSize
@@ -886,7 +887,7 @@ def add(x, y):
 # convert -delay 7 -loop 1 -compress lzw -layers optimize frame* out.gif
 # convert is part of imagemagick (freeware)
 
-SAVE_POSTSCRIPT = False
+SAVE_POSTSCRIPT = True
 POSTSCRIPT_OUTPUT_DIR = 'frames'
 FRAME_NUMBER = 0
 import os
