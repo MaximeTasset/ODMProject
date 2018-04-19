@@ -78,36 +78,36 @@ class ReinfAgent(GhostAgent,Agent):
             legalActions = state.getLegalActions(self.index)
             s = getDataState(state)
             # If we don't have learn yet or epsilon greedy, make random move
-#            if np.random.uniform() <= self.epsilon:
-#                v = self.sess.run(self.local_AC.value,
-#                                feed_dict={self.local_AC.inputs:[s],
-#                                self.local_AC.state_in[0]:self.rnn_state[0],
-#                                self.local_AC.state_in[1]:self.rnn_state[1]})
-#                move = legalActions[np.random.randint(0,len(legalActions))]
-#                if Actions.directionToVector(move) == (0,0):
-#                    move = legalActions[np.random.randint(0,len(legalActions))]
-#            else:
-    #            move = legalActions[np.argmax(
-    #                    self.learning_algo.predict(
-    #                            np.array([(getDataState(state)+a) for a in map(Actions.directionToVector,legalActions)])))]
-
-            a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
-                            feed_dict={self.local_AC.inputs:[s],
-                            self.local_AC.state_in[0]:self.rnn_state[0],
-                            self.local_AC.state_in[1]:self.rnn_state[1]})
-
-
-            move = np.random.choice(a_dist[0],p=a_dist[0])
-            move = DIRECTION[np.argmax(a_dist == move)]
-            i = 0
-            while not move in legalActions:
-                move = np.random.choice(a_dist[0],p=a_dist[0])
-                move = DIRECTION[np.argmax(a_dist == move)]
-                i += 1
-                if i == 100:
+            if np.random.uniform() <= self.epsilon:
+                v = self.sess.run(self.local_AC.value,
+                                feed_dict={self.local_AC.inputs:[s],
+                                self.local_AC.state_in[0]:self.rnn_state[0],
+                                self.local_AC.state_in[1]:self.rnn_state[1]})
+                move = legalActions[np.random.randint(0,len(legalActions))]
+                if Actions.directionToVector(move) == (0,0):
                     move = legalActions[np.random.randint(0,len(legalActions))]
-                    if Actions.directionToVector(move) == (0,0):
-                        move = legalActions[np.random.randint(0,len(legalActions))]
+            else:
+
+                a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
+                                feed_dict={self.local_AC.inputs:[s],
+                                self.local_AC.state_in[0]:self.rnn_state[0],
+                                self.local_AC.state_in[1]:self.rnn_state[1]})
+
+                #move = np.random.choice(a_dist[0],p=a_dist[0])
+                #move = DIRECTION[np.argmax(a_dist == move)]
+                sorted_probas = sorted(a_dist[0])
+                i = 0
+                a_dist = a_dist[0].tolist()
+                move = DIRECTION[a_dist.index(sorted_probas[i])]
+                while not move in legalActions:
+#                    move = np.random.choice(a_dist[0],p=a_dist[0])
+#                    move = DIRECTION[np.argmax(a_dist == move)]
+                    i += 1
+                    move = DIRECTION[a_dist.index(sorted_probas[i])]
+#                    if i == 100:
+#                        move = legalActions[np.random.randint(0,len(legalActions))]
+#                        if Actions.directionToVector(move) == (0,0):
+#                            move = legalActions[np.random.randint(0,len(legalActions))]
 
 
             if self.learn:
@@ -288,9 +288,4 @@ def getDataState(state):
             elif (i,j) in caps_pos:
                 data[i,j] = nb_agent + 3
     return list(data.flatten())
-
-
-
-
-
 
