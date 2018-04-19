@@ -80,17 +80,17 @@ class ReinfAgent(GhostAgent,Agent):
             legalActions = state.getLegalActions(self.index)
             s = getDataState(state)
             # If we don't have learn yet or epsilon greedy, make random move
-            if np.random.uniform() <= self.epsilon:
-                v = self.sess.run(self.local_AC.value,
-                                feed_dict={self.local_AC.inputs:[s],
-                                self.local_AC.state_in[0]:self.rnn_state[0],
-                                self.local_AC.state_in[1]:self.rnn_state[1]})
-                move = legalActions[np.random.randint(0,len(legalActions))]
-                if Actions.directionToVector(move) == (0,0):
-                    move = legalActions[np.random.randint(0,len(legalActions))]
-            else:
+#            if np.random.uniform() <= self.epsilon:
+#                v = self.sess.run(self.local_AC.value,
+#                                feed_dict={self.local_AC.inputs:[s],
+#                                self.local_AC.state_in[0]:self.rnn_state[0],
+#                                self.local_AC.state_in[1]:self.rnn_state[1]})
+#                move = legalActions[np.random.randint(0,len(legalActions))]
+#                if Actions.directionToVector(move) == (0,0):
+#                    move = legalActions[np.random.randint(0,len(legalActions))]
+#            else:
 
-                a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
+            a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
                                 feed_dict={self.local_AC.inputs:[s],
                                 self.local_AC.state_in[0]:self.rnn_state[0],
                                 self.local_AC.state_in[1]:self.rnn_state[1]})
@@ -99,11 +99,11 @@ class ReinfAgent(GhostAgent,Agent):
                 #move = DIRECTION[np.argmax(a_dist == move)]
 
                 #we remove the illegal move from the distribution
-                a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
-                a_dist = np.array(a_dist)
-                a_dist = a_dist / sum(a_dist)
-                move = np.random.choice(a_dist,p=a_dist)
-                move = DIRECTION[np.argmax(a_dist == move)]
+            a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
+            a_dist = np.array(a_dist)
+            a_dist = a_dist / sum(a_dist)
+            move = np.random.choice(a_dist,p=a_dist)
+            move = DIRECTION[np.argmax(a_dist == move)]
 #                sorted_probas = sorted(a_dist)
 #                i = 0
 
