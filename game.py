@@ -807,8 +807,7 @@ class Game:
                 i += 1
                 sys.stdout.write("\r{}   ".format(i))
                 sys.stdout.flush()
-                if i >= 300:
-                  print("passe")
+                if i >= 3000:
                   self.state.data._win = False
                   self.state.data._lose = True
                   break
