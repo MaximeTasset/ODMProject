@@ -83,11 +83,12 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
         while nb_it<100 or abs(consec_wins)<50:
 
             for i in range(nb_ghosts+1):
+                print("Pacman" if not i else "Ghost {}".format(i))
                 for agents in parallel_agents:
                     agents[i].startLearning()
-
-                for j in range(round_training):
-                    sys.stdout.write("\r                {}/{}       ".format(j+1,round_training))
+                curr_round_training = round_training if i else max(round_training,round_training*nb_ghosts)
+                for j in range(curr_round_training):
+                    sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
                     sys.stdout.flush()
 
                     pool.map(runGames,args)
