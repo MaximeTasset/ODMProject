@@ -277,8 +277,8 @@ def getDataState(state):
     nb_agent = len(agent_pos)
 
     data = np.zeros((walls_pos.width,walls_pos.height))
-    for i in walls_pos.width:
-        for j in walls_pos.height:
+    for i in range(walls_pos.width):
+        for j in range(walls_pos.height):
             if (i,j) in agent_pos:
                 data[i,j] = agent_pos.index((i,j)) + 1
             elif walls_pos[i,j]:
@@ -288,11 +288,6 @@ def getDataState(state):
             elif (i,j) in caps_pos:
                 data[i,j] = nb_agent + 3
     return data
-
-    return list(np.array([st.getPosition() for st in state.data.agentStates]).flatten().tolist() \
-            + convertGridToNpArray(state.getFood()).flatten().tolist() \
-            + convertGridToNpArray(state.getWalls()).flatten().tolist())
-
 
 
 
