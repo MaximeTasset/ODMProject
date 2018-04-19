@@ -37,7 +37,7 @@ def normalized_columns_initializer(std=1.0):
 
 class AC_Network():
     def __init__(self,s_size,a_size,scope,trainer,global_scope='global'):
-        print(s_size,a_size,scope,trainer,global_scope)
+#        print(s_size,a_size,scope,trainer,global_scope)
 
         with tf.variable_scope(scope):
             #Input and hidden layers

@@ -21,11 +21,13 @@ import sys
 import tensorflow as tf
 import scipy.signal
 
-DIRECTION = { 0 : 'North',
-              1 : 'South',
-              2  :'East',
-              3  :'West',
-              4  : 'Stop'}
+from game import Directions
+
+DIRECTION = { 0 : Directions.NORTH,
+              1 : Directions.SOUTH,
+              2 : Directions.EAST,
+              3 : Directions.WEST,
+              4 : Directions.STOP}
 
 
 
@@ -95,15 +97,26 @@ class ReinfAgent(GhostAgent,Agent):
 
                 #move = np.random.choice(a_dist[0],p=a_dist[0])
                 #move = DIRECTION[np.argmax(a_dist == move)]
-                sorted_probas = sorted(a_dist[0])
+                a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
+
+                sorted_probas = sorted(a_dist)
                 i = 0
-                a_dist = a_dist[0].tolist()
+
                 move = DIRECTION[a_dist.index(sorted_probas[i])]
+#                print(legalActions)
+#                print('CACA',a_dist,sorted_probas)
+                a = []
                 while not move in legalActions:
 #                    move = np.random.choice(a_dist[0],p=a_dist[0])
 #                    move = DIRECTION[np.argmax(a_dist == move)]
                     i += 1
-                    move = DIRECTION[a_dist.index(sorted_probas[i])]
+                    #print(move,i)
+                    try:
+                        a.append(move)
+                        move = DIRECTION[a_dist.index(sorted_probas[i])]
+                    except IndexError:
+                        print(a_dist,sorted_probas,i,legalActions,a)
+                        raise IndexError
 #                    if i == 100:
 #                        move = legalActions[np.random.randint(0,len(legalActions))]
 #                        if Actions.directionToVector(move) == (0,0):
