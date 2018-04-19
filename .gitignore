@@ -1,5 +1,6 @@
 
 *.pyc
-*.pyc
-__pycache__/reinfagent.cpython-36.pyc
-*.pyc
+*.jpg
+*.mp4
+*.ps
+test
