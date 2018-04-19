@@ -41,6 +41,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
 
 
     layout_instance = layout.getLayout('mediumClassic')
+    nb_ghosts = min(len(layout_instance.agentPositions)-1,nb_ghosts)
 
     # Get the length of a state:
     initState = pacman.GameState()
@@ -112,7 +113,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
     return master_networks
 
 if __name__ is "__main__":
-  iterativeA3c(nb_ghosts=3,nb_training=1,display_mode='graphics',
-               round_training=5,num_parallel=1,
+  iterativeA3c(nb_ghosts=3,nb_training=10,display_mode='graphics',
+               round_training=10,num_parallel=psutil.cpu_count(),
                nb_cores=max(1,psutil.cpu_count()-1))
 #  max(1,psutil.cpu_count())
