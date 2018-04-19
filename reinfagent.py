@@ -97,26 +97,31 @@ class ReinfAgent(GhostAgent,Agent):
 
                 #move = np.random.choice(a_dist[0],p=a_dist[0])
                 #move = DIRECTION[np.argmax(a_dist == move)]
+
+                #we remove the illegal move from the distribution
                 a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
+                a_dist = np.array(a_dist)
+                a_dist = a_dist / sum(a_dist)
+                move = np.random.choice(a_dist,p=a_dist)
+                move = DIRECTION[np.argmax(a_dist == move)]
+#                sorted_probas = sorted(a_dist)
+#                i = 0
 
-                sorted_probas = sorted(a_dist)
-                i = 0
-
-                move = DIRECTION[a_dist.index(sorted_probas[i])]
+#                move = DIRECTION[a_dist.index(sorted_probas[i])]
 #                print(legalActions)
 #                print('CACA',a_dist,sorted_probas)
-                a = []
-                while not move in legalActions:
+#                a = []
+#                while not move in legalActions:
 #                    move = np.random.choice(a_dist[0],p=a_dist[0])
 #                    move = DIRECTION[np.argmax(a_dist == move)]
-                    i += 1
+#                    i += 1
                     #print(move,i)
-                    try:
-                        a.append(move)
-                        move = DIRECTION[a_dist.index(sorted_probas[i])]
-                    except IndexError:
-                        print(a_dist,sorted_probas,i,legalActions,a)
-                        raise IndexError
+#                    try:
+#                        a.append(move)
+#                        move = DIRECTION[a_dist.index(sorted_probas[i])]
+#                    except IndexError:
+#                        print(a_dist,sorted_probas,i,legalActions,a)
+#                        raise IndexError
 #                    if i == 100:
 #                        move = legalActions[np.random.randint(0,len(legalActions))]
 #                        if Actions.directionToVector(move) == (0,0):
