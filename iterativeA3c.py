@@ -96,7 +96,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
                 for agents in parallel_agents:
                     agents[i].stopLearning()
 
-                sys.stdout.write("\r           Final result       ")
+                sys.stdout.write("\r           Final result       \n")
                 sys.stdout.flush()
                 games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
                 # Compute how many consecutive wins ghosts or pacman have
@@ -114,7 +114,7 @@ def iterativeA3c(nb_ghosts=3,nb_training=20,display_mode='graphics',
     return master_networks
 
 if __name__ is "__main__":
-  iterativeA3c(nb_ghosts=3,nb_training=10,display_mode='graphics',
-               round_training=10,num_parallel=psutil.cpu_count(),
+  iterativeA3c(nb_ghosts=1,nb_training=10,display_mode='graphics',
+               round_training=5,num_parallel=psutil.cpu_count(),
                nb_cores=max(1,psutil.cpu_count()-1))
 #  max(1,psutil.cpu_count())

@@ -145,8 +145,8 @@ class ReinfAgent(GhostAgent,Agent):
                          1000 * state.isWin() + 10000 * state.isLose()
             else:
                 #pacman reward
-                reward = -1 + 1000 * state.isWin() - \
-                        100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
+                reward = -1 + 1000 * state.isWin() \
+                        -100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51# + \
                         #(state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
@@ -270,6 +270,6 @@ def getDataState(state):
     """
     #,state.getCapsules().copy()
 
-    return list(np.array(
-            [st.getPosition() for st in state.data.agentStates]).flatten().tolist() \
-            + convertGridToNpArray(state.getFood()).flatten().tolist())
+    return list(np.array([st.getPosition() for st in state.data.agentStates]).flatten().tolist() \
+            + convertGridToNpArray(state.getFood()).flatten().tolist() \
+            + convertGridToNpArray(state.getWalls()).flatten().tolist())
