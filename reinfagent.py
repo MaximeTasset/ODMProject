@@ -281,13 +281,13 @@ def getDataState(state):
         for j in range(walls_pos.height):
             if (i,j) in agent_pos:
                 data[i,j] = agent_pos.index((i,j)) + 1
-            elif walls_pos[i,j]:
+            elif walls_pos[i][j]:
                 data[i,j] = nb_agent + 1
-            elif food_pos[i,j]:
+            elif food_pos[i][j]:
                 data[i,j] = nb_agent + 2
             elif (i,j) in caps_pos:
                 data[i,j] = nb_agent + 3
-    return data
+    return list(data.flatten())
 
 
 
