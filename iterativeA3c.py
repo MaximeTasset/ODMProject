@@ -51,9 +51,9 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     initState = pacman.GameState()
     initState.initialize(layout_instance, nb_ghosts)
     s_size = len(getDataState(initState))
-
+    grid_size = initState.getWalls().width,initState.getWalls().height
     # Generate global network
-    master_networks = [AC_Network(s_size,4 if i else 5,"global_"+str(i),None,
+    master_networks = [AC_Network(s_size,4 if i else 5,grid_size,"global_"+str(i),None,
                                   global_scope="global_"+str(i))
                                     for i in range(0,nb_ghosts+1)]
     global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False) for i in range(0,nb_ghosts+1)]
@@ -63,7 +63,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     with tf.Session() as sess:
 
         parallel_agents = [[ReinfAgent(optims[i],global_episodes[i],sess,
-                                       s_size,4 if i else 5,index=i,
+                                       s_size,4 if i else 5,grid_size,index=i,
                                        name="worker_{}_{}".format(i,j),
                                        global_scope="global_"+str(i))
                                         for i in range(0,nb_ghosts+1)]
@@ -136,6 +136,6 @@ def make_gif(filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  iterativeA3c(nb_ghosts=1,round_training=100,display_mode='graphics',num_parallel=psutil.cpu_count(),
+  iterativeA3c(nb_ghosts=1,round_training=500,display_mode='graphics',num_parallel=psutil.cpu_count(),
                nb_cores=max(1,psutil.cpu_count()-1))
 #  max(1,psutil.cpu_count())

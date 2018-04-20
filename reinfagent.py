@@ -29,11 +29,9 @@ DIRECTION = { 0 : Directions.NORTH,
               3 : Directions.WEST,
               4 : Directions.STOP}
 
-
-
 class ReinfAgent(GhostAgent,Agent):
 
-    def __init__(self,optim, global_episodes,sess,s_size,a_size, index=0,
+    def __init__(self,optim, global_episodes,sess,s_size,a_size,grid_size, index=0,
                  name="worker",global_scope='global',epsilon=0.1,gamma=0.95):
 
         self.lastMove = Directions.STOP
@@ -58,7 +56,7 @@ class ReinfAgent(GhostAgent,Agent):
         self.episode_lengths = []
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter("train_"+str(self.index))
-        self.local_AC = AC_Network(s_size,a_size,self.name,self.optim,global_scope=self.global_scope)
+        self.local_AC = AC_Network(s_size,a_size,grid_size,self.name,self.optim,global_scope=self.global_scope)
         self.update_local_ops = update_target_graph(self.global_scope,self.name)
         self.rnn_state = self.local_AC.state_init
         self.batch_rnn_state = self.rnn_state
@@ -281,13 +279,13 @@ def convertGridToNpArray(grid):
           array[x,y] = grid[x][y]
     return array
 
+
 def getDataState(state):
     """
     " Returns a tuple whose first elements are the positions of all the agents,
     " and whose other elements contain the flattened food grid.
     """
     #,state.getCapsules().copy()
-
     agent_pos = [st.getPosition() for st in state.data.agentStates]
     food_pos = state.getFood()
     walls_pos = state.getWalls()
@@ -305,5 +303,5 @@ def getDataState(state):
                 data[i,j] = nb_agent + 2
             elif (i,j) in caps_pos:
                 data[i,j] = nb_agent + 3
-    return list(data.flatten())
+    return data.flatten()
 
