@@ -75,7 +75,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                                        s_size,4 if i else 5,grid_size,index=i,
                                        name="worker_{}_{}".format(i,j),
                                        global_scope="global_"+str(i),
-                                       round_training=round_training)
+                                       round_training=round_training if i else max(round_training,round_training*nb_ghosts))
                                         for i in range(0,nb_ghosts+1)]
                                         for j in range(num_parallel)]
 
@@ -146,6 +146,6 @@ def makeGif(folder='videos',filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=0,round_training=100,display_mode='graphics',num_parallel=4,
+  master_nwk = iterativeA3c(nb_ghosts=2,round_training=500,display_mode='graphics',num_parallel=4,
                nb_cores=max(1,psutil.cpu_count()-1),folder='videos')
 #  max(1,psutil.cpu_count())

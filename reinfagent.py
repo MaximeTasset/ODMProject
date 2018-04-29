@@ -98,8 +98,12 @@ class ReinfAgent(GhostAgent,Agent):
             if self.round_training:
                 if self.index:
                     dist = self.training_ghost.getDistribution(state)
-                    move = np.random.choice(dist,p=dist)
-                    move = DIRECTION[np.argmax(dist == move)]
+                    dist.setdefault(0)
+                    dist_p = np.zeros(len(DIRECTION))
+                    for i in DIRECTION:
+                        dist_p[i] = dist[DIRECTION[i]]
+                    move = np.random.choice(dist_p,p=dist_p)
+                    move = DIRECTION[np.argmax(dist_p == move)]
                 else:
                     move = self.training_pacman.getAction(state)
 
