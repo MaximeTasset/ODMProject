@@ -44,22 +44,17 @@ class AC_Network():
             self.inputs = tf.placeholder(shape=[None,s_size],dtype=tf.float32)
             self.imageIn = tf.reshape(self.inputs,shape=[-1,grid_size[0],grid_size[1],1])
             self.conv1 = slim.conv2d(activation_fn=tf.nn.elu,
-                inputs=self.imageIn,num_outputs=32,
+                inputs=self.imageIn,num_outputs=64,
                 kernel_size=tuple([8,8]),stride=tuple([1,1]),padding='VALID')
             self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
                 inputs=self.conv1,num_outputs=16,
-                kernel_size=tuple([4,4]),stride=tuple([4,4]),padding='VALID')
+                kernel_size=tuple([4,4]),stride=tuple([1,1]),padding='VALID')
 
 
             hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.elu)
 
-#            hidden = slim.fully_connected(self.inputs,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-#            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-#            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-#            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-            for i in range(10):
-              hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-
+            for i in range(20):
+                hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
             #Recurrent network for temporal dependencies
             lstm_cell = tf.contrib.rnn.BasicLSTMCell(100,state_is_tuple=True)
@@ -78,7 +73,6 @@ class AC_Network():
             lstm_c, lstm_h = lstm_state
             self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
             rnn_out = tf.reshape(lstm_outputs, [-1, 100])
-
             #Output layers for policy and value estimations
             self.policy = slim.fully_connected(rnn_out,a_size,
                 activation_fn=tf.nn.softmax,
