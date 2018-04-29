@@ -49,13 +49,17 @@ class AC_Network():
             self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
                 inputs=self.conv1,num_outputs=16,
                 kernel_size=tuple([4,4]),stride=tuple([4,4]),padding='VALID')
+
+
             hidden = slim.fully_connected(slim.flatten(self.conv1),256,activation_fn=tf.nn.elu)
 
 #            hidden = slim.fully_connected(self.inputs,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+            for i in range(30):
+              hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+
 
             #Recurrent network for temporal dependencies
             lstm_cell = tf.contrib.rnn.BasicLSTMCell(256,state_is_tuple=True)
