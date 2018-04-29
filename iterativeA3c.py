@@ -34,7 +34,7 @@ def runGames(kargs):
     return pacman.runGames(**kargs)
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,num_parallel=1,nb_cores=-1, folder='videos',layer='boxSearch'):
+                 round_training=5,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
 
     tf.reset_default_graph()
     pool = ThreadPool(num_parallel)

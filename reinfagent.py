@@ -95,7 +95,7 @@ class ReinfAgent(GhostAgent,Agent):
             legalActions = state.getLegalActions(self.index)
             s = getDataState(state)
             # If we learn and epsilon greedy, make random move
-            if self.learn and self.round_training:
+            if self.round_training:
                 if self.index:
                     dist = self.training_ghost.getDistribution(state)
                     move = np.random.choice(dist,p=dist)
