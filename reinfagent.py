@@ -42,6 +42,7 @@ class ReinfAgent(GhostAgent,Agent):
         self.learning_algo = None
         self.learn = False
         self.epsilon = epsilon
+        self.min_epsilon = min_epsilon
         self.prev = None
         self.one_step_transistions = []
         self.opt = tf.train.AdamOptimizer()
