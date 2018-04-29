@@ -57,10 +57,10 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     nb_ghosts = min(len(layout_instance.agentPositions)-1,nb_ghosts)
 
     # Get the length of a state:
-    initState = pacman.GameState()
-    initState.initialize(layout_instance, nb_ghosts)
-    s_size = len(getDataState(initState))
-    grid_size = initState.getWalls().width,initState.getWalls().height
+    init_state = pacman.GameState()
+    init_state.initialize(layout_instance, nb_ghosts)
+    s_size = len(getDataState(init_state))
+    grid_size = init_state.getWalls().width,init_state.getWalls().height
     # Generate global network
     master_networks = [AC_Network(s_size,4 if i else 5,grid_size,"global_"+str(i),None,
                                   global_scope="global_"+str(i))
@@ -121,7 +121,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     else:
                         consec_wins = min(-1,consec_wins-1)
 
-                make_gif(folder,'agent_{}_nbrounds_{}.mp4'.format(i,nb_it))
+                makeGif(folder,'agent_{}_nbrounds_{}.mp4'.format(i,nb_it))
                 graphicsDisplay.FRAME_NUMBER = 0
             nb_it += 1
 
@@ -129,7 +129,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     return master_networks
 
 
-def make_gif(folder='videos',filename='movie.mp4'):
+def makeGif(folder='videos',filename='movie.mp4'):
     filename = folder+'/'+filename
     # The images to use are in subfolder frames of the current folder:
     nb_frames = len(os.listdir(os.getcwd()+"/frames"))
