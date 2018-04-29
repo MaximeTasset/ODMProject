@@ -44,12 +44,12 @@ class AC_Network():
             self.inputs = tf.placeholder(shape=[None,s_size],dtype=tf.float32)
             self.imageIn = tf.reshape(self.inputs,shape=[-1,grid_size[0],grid_size[1],1])
             self.conv1 = slim.conv2d(activation_fn=tf.nn.elu,
-                inputs=self.imageIn,num_outputs=16,
-                kernel_size=tuple([4,4]),stride=tuple([1,1]),padding='VALID')
+                inputs=self.imageIn,num_outputs=32,
+                kernel_size=tuple([8,8]),stride=tuple([1,1]),padding='VALID')
             self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
-                inputs=self.conv1,num_outputs=32,
-                kernel_size=tuple([2,2]),stride=tuple([1,1]),padding='VALID')
-            hidden = slim.fully_connected(slim.flatten(self.conv2),256,activation_fn=tf.nn.elu)
+                inputs=self.conv1,num_outputs=16,
+                kernel_size=tuple([4,4]),stride=tuple([4,4]),padding='VALID')
+            hidden = slim.fully_connected(slim.flatten(self.conv1),256,activation_fn=tf.nn.elu)
 
 #            hidden = slim.fully_connected(self.inputs,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
             hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))

@@ -19,7 +19,10 @@ import psutil
 import os
 import imageio as io
 
-import graphicsDisplay
+# Assume that you have 8GB of GPU memory and want to allocate ~6GB:
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
+
+sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
 def runGames(kargs):
     return pacman.runGames(**kargs)
@@ -136,6 +139,6 @@ def make_gif(filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  iterativeA3c(nb_ghosts=1,round_training=500,display_mode='graphics',num_parallel=psutil.cpu_count(),
+  iterativeA3c(nb_ghosts=0,round_training=500,display_mode='graphics',num_parallel=psutil.cpu_count(),
                nb_cores=max(1,psutil.cpu_count()-1))
 #  max(1,psutil.cpu_count())
