@@ -1,17 +1,18 @@
+from expectminimax import ExpectMiniMax
 from pacman import Directions
 from game import Agent
-from math import inf
-import util
-import agentsearch
-import copy
-from math import sqrt
-from game import Actions
-
+import numpy as np
+import sys
 # XXX: You should complete this class for Step 2
-
+from search import SearchProblemData, astar, dist, aStarHeuristic, Graph
 
 class Agentghost(Agent):
-    def __init__(self, index=0, time_eater=40, g_pattern=0):
+    """
+    Similar to agentSearch except that it just takes the closest food
+    destination and it looks to handle ghosts
+    """
+
+    def __init__(self, index=0, time_eater=40, g_pattern=0, allSame=True):
         """
         Arguments:
         ----------
@@ -24,25 +25,37 @@ class Agentghost(Agent):
                        1 - greedyghost
                        2 - randyghost
                        3 - rpickyghost
+        - `allSame`: True if rpickyghosts follow the same pattern,
+                     False otherwise
         """
         self.g_pattern = g_pattern
-        self.max_depth = 0
-        self.first_call = True
-        self.prob_patt = {}
-        self.first_pacman_move = None # The current first pacman move of the expectimax
-        # self.prob_prec_move[agent] =
-        # (prec_pos_agent, prec_possible_actions, prec_possible_actions_probas)
-        # If pattern = 3
-        self.prob_prec_move = {}
-        self.agentsearch = agentsearch.Agentsearch(ghost_call = True)
-        self.min_ghost_dist = 7
-        self.prec_moves = [] # Precedent moves of pacman
-        self.prec_eat = [] # Precedent foods/capsules eaten by pacman
-        # Initially: self.possible_patterns[ghost]=[0,1,2] : 0=lefty, 1=greedy, 2=randy
-        self.possible_patterns = {}
-        self.listen_search = [False,0]  # True if pacman must listen to the search agent.
-        self.prec_pos = [] # Prec positionsof pacman
-        pass
+
+        self.g_patterns_prob = None
+        self.g_pattern_predict = {}
+
+        self.moves = []
+        self.moves_nodes = []
+        self.depth = 8
+        self.max_d = 7
+        self.allSame = allSame
+        self.problem = None
+        self.goal = None
+        self.graph = None
+        super().__init__(index)
+        self.known = {}
+        self.start = None
+
+    def reset(self):
+        self.g_patterns_prob = None
+        self.g_pattern_predict = {}
+
+        self.moves = []
+        self.moves_nodes = []
+
+        self.problem = None
+        self.goal = None
+        self.graph = None
+        self.known = {}
 
     def getAction(self, state):
         """
@@ -55,520 +68,200 @@ class Agentghost(Agent):
         -------
         - A legal move as defined game.Directions.
         """
+        if self.start is None:
+            self.start = tuple(
+                state.data.agentStates[0].start.getPosition())
 
-        num_agents = state.getNumAgents()
+        direction = state.data.agentStates[0].getDirection()
+        pos = tuple(state.getPacmanPosition())
+        if self.graph is None or (
+                direction == Directions.STOP and pos == self.start):
+            self.reset()
+            self.graph = Graph(state)
+            ch = self.graph.mean_choices
+            if ch <= 2.3:
+                mult = 1.
+            elif ch > 2.3 and ch <= 3:
+                mult = 0.75
+            else:
+                mult = 0.5
+            if self.g_pattern >= 2:
+                self.depth = int(5 * mult)
+            elif self.g_pattern == 0:
+                self.depth = int(8 * mult)
+            else:
+                self.depth = int(8 * mult)
 
-        # If there are no ghosts, use the search agent normally:
-        if num_agents == 1:
-            if self.first_call:
-                self.agentsearch = agentsearch.Agentsearch(ghost_call = False)
-            return self.agentsearch.getAction(state)
-        # If ghost far enough, call agentsearch:
-        if self.ghostFar(state):
-            return self.agentsearch.getAction(state)
+        else:
+            self.graph.update_graph(state)
 
-        # If the ghost is rpicky:
-        if self.g_pattern == 3 and not self.first_call:
+        ret = Directions.STOP
 
+        nodes_list = self.graph.nodes_list
+        nodes_array = self.graph.nodes_array
+        # start node is the node where pacman is positioned
+        start = nodes_array[self.graph.posX][self.graph.posY]
 
-            last_pacman_move = self.prec_moves[len(self.prec_moves)-1]
+        if len(self.moves) == 0:
 
-            for ghost in range(1,num_agents):
+            # this method tries to go to the closest node from pacman
+            distance = sys.maxsize
+            end2 = None
+            for node in nodes_list:
+                if node.has_food and node is not start and self.graph.dist(
+                        node) < distance:
+                    distance = self.graph.dist(node)
+                    end2 = node
 
-                # If we know already the patern, no need to go there:
-                if len(self.possible_patterns[ghost]) == 1:
-                    continue
-                move = state.getGhostState(ghost).getDirection()
+            middle = end2
+            if middle is not None:
+                # look for a path to end node. It ends early if it finds food
+                # closer than the end node
+                self.problem = SearchProblemData(nodes_list, start, middle)
+                self.goal = middle
+                path, path_nodes = astar(self.problem, aStarHeuristic)
+                # path = dfs(problem)
+                if path is not None:
+                    self.moves = path
+                    self.moves_nodes = path_nodes
 
-                # If the ghost has just ben killed, nothing to deduce:
-                if move == Directions.STOP:
-                    continue
-                # If the ghost has been skipped because it was
-                # too far from pacman, nothing to deduce:
-                if not(ghost in self.prob_prec_move[last_pacman_move]):
-                    continue
+        # get ghost info
+        ghosts = state.getGhostStates()
+        pos = []
+        if self.g_patterns_prob is None and len(ghosts):
+            self.g_patterns_prob = np.zeros((len(ghosts), 3))
+            if self.g_pattern == 3:
+                self.g_patterns_prob[:, :] = 1. / 3
+            else:
+                self.g_patterns_prob[:, self.g_pattern] = 1.
+        else:
+            pass
 
-                updated_possible_patterns = []
-
-
-                self.prob_prec_move[last_pacman_move]
-                self.prob_prec_move[last_pacman_move][ghost][2]
-                index_move = self.prob_prec_move[last_pacman_move][ghost][2].index(move)
-
-                for pattern in self.possible_patterns[ghost]:
-
-                    # Update the probabilities using the new actions
-                    self.prob_patt[ghost][pattern] = self.prob_patt[ghost][pattern] * self.prob_prec_move[last_pacman_move][ghost][3][pattern][index_move]
-                    # If the probability of doing the move that has been done
-                    # was hardly zero for this pattern, this is very likely not
-                    # the good pattern, else we must still consider it:
-                    if self.prob_prec_move[last_pacman_move][ghost][3][pattern][index_move] > 0.0001:
-                        updated_possible_patterns.append(pattern)
+        for i, ghost in enumerate(ghosts):
+            realx, realy = ghost.getPosition()
+            x, y = int(realx), int(realy)
+            if not ghost.scaredTimer and self.g_pattern == 3 \
+                    and i in self.g_pattern_predict:
+                for pattern in self.g_pattern_predict[i]:
+                    p_moves = self.g_pattern_predict[i][pattern]
+                    if (x, y) in p_moves:
+                        prob = p_moves[(x, y)]
+                        if not self.allSame:
+                            self.g_patterns_prob[i, pattern] *= prob
+                        else:
+                            self.g_patterns_prob[:, pattern] *= prob
                     else:
-                        self.prob_patt[ghost][pattern] = 0
+                        if not self.allSame:
+                            self.g_patterns_prob[i, pattern] = 0
+                        else:
+                            self.g_patterns_prob[:, pattern] = 0
+                del self.g_pattern_predict[i]
 
-                self.possible_patterns[ghost] = updated_possible_patterns
+        for i, ghost in enumerate(ghosts):
+            realx, realy = ghost.getPosition()
+            x, y = int(realx), int(realy)
+            try:
+                p_prob = self.g_patterns_prob[i, :] / \
+                    sum(self.g_patterns_prob[i, :])
+                self.g_patterns_prob[i, :] = p_prob[:]
+            except BaseException:
+                p_prob = np.zeros(3)
+                p_prob[:] = self.g_patterns_prob[i, :] = 1. / 3
 
-
-                sum_new_probas = sum(self.prob_patt[ghost])
-                #Normalize the updated probabilities
-                self.prob_patt[ghost] = [i/sum_new_probas for i in self.prob_patt[ghost]]
-
-            update = True
-            for ghost in range(1,num_agents):
-                # If the pattern is not determined yet or if the pattern is randy:
-                if len(self.possible_patterns[ghost]) != 1 or (len(self.possible_patterns[ghost]) == 1 and self.possible_patterns[ghost][0] == 2 ):
-                    update = False
+            for p, prob in enumerate(p_prob):
+                if prob > 0.92:
+                    self.g_patterns_prob[i, :] = 0
+                    self.g_patterns_prob[i, p] = 1
                     break
-            # If all the patterns are determined and none of them is randy, we can pick a bigger max_depth:
-            if update:
-                ref_number = 25
-                self.max_depth = ref_number - ref_number%state.getNumAgents()
 
-        # If it is the first time that getAction is called, initialize variables:
-        if self.first_call:
+            facing = ghost.getDirection()
+            b = int(x) != realx or int(y) != realy
+            pos.append(
+                (int(x),
+                 int(y),
+                    facing,
+                    (ghost.scaredTimer,
+                     b),
+                    ghost.start.pos,
+                    tuple(p_prob)))
+        # do minimax if there are ghosts close enough
+        doMinMax = False
+        cell = self.graph.nodes_array[self.graph.posX][self.graph.posY]
+        for coord in pos:
+            x, y, _, _, _, _ = coord
+            ghost_node = nodes_array[x][y]
+            if dist(start, ghost_node) < self.depth:
+                doMinMax = True
 
-            # If the ghost is random
-            if self.g_pattern == 3:
-                self.prob_patt = {}
-                for ghost in range(1,num_agents):
-                    self.prob_patt[ghost] = [1/3,1/3,1/3]
-                    self.possible_patterns[ghost] = [0,1,2]
-            if self.g_pattern < 2:
-                ref_number = 25
-            else:
-                ref_number = 15
-            self.max_depth = ref_number - ref_number%state.getNumAgents()
-            self.first_call = False
+        if doMinMax:
+            minmax = ExpectMiniMax(
+                self.graph,
+                start,
+                self.goal,
+                self.g_pattern,
+                self.moves_nodes,
+                self.depth)
+            # update class and do expectminimax
+            _, moves = minmax.expect(start, self.depth, True, pos)
+            move = moves[len(moves) - 1]
+            if move != self.moves[0]:
+                self.moves = []
+                self.moves_nodes = []
+                if self.g_pattern == 3:
+                    self.predict_ghost(move, pos)
 
-        # If the ghost is rpicky:
+                negb_cell = cell.getNeighborByDirection(move)
+                if self.graph.nb_food == 1 and negb_cell.has_food:
+                    self.reset()
+                return move
+
+        ret = self.moves[0]
+        del self.moves[0]
+        del self.moves_nodes[0]
         if self.g_pattern == 3:
-            for direct in ['North','South','West','East']:
-                for ghost in range(1,num_agents):
-                    self.prob_prec_move[direct] = {}
+            self.predict_ghost(ret, pos)
+        negb_cell = cell.getNeighborByDirection(ret)
+        if self.graph.nb_food == 1 and negb_cell.has_food:
+            self.reset()
+        return ret
 
-
-        result = self.expectimax(state, 0, self.max_depth, [] )[1]
-        pac_pos = state.getPacmanPosition()
-
-        # Search only here to let the guess happen:
-        if self.listen_search[0]:
-            self.listen_search[1] = self.listen_search[1] - 1
-            if self.listen_search[1] == 0:
-                self.listen_search[0] = False
-            result = self.agentsearch.getAction(state)
-
-        # Handle the go and go back issue:
-        elif len(self.prec_pos) > 4:
-            # if we went a step in a direction
-            # and now we want to go in the opposite without any reason, listen to
-            # the search agent for the two next steps:
-            if result == self.prec_pos[len(self.prec_pos)-2] and not self.prec_eat[len(self.prec_pos)-1] and self.ghostFar(state):
-                self.listen_search = [True,3]
-                result = self.agentsearch.getAction(state)
-            # If there are ghosts near of pacman I am a bit more careful:
-            elif (result == self.prec_pos[len(self.prec_pos)-2] == self.prec_pos[len(self.prec_pos)-4] and
-                                           self.prec_pos[len(self.prec_pos)-1] == self.prec_pos[len(self.prec_pos)-3] == self.prec_pos[len(self.prec_pos)-5]):
-                self.listen_search = [True,3]
-                result = self.agentsearch.getAction(state)
-
-        #child = state.generatePacmanSuccessor(result)
-        direction = Actions._directions[result]
-        next_pac_pos = (pac_pos[0] + direction[0], pac_pos[1] + direction[1])
-        pos_capsules = state.getCapsules()
-        if state.hasFood(next_pac_pos[0], next_pac_pos[1]) or (next_pac_pos in pos_capsules):
-            self.prec_eat.append(True)
-        else:
-            self.prec_eat.append(False)
-
-        self.prec_pos.append(pac_pos)
-        self.prec_moves.append(result)
-
-        return result
-
-    def expectimax(self, state, agent, max_depth, to_skip):
+    def predict_ghost(self, move, g_pos):
         """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of the agent that should play next
-        - `max_depth`: The number of agents'moves that can be performed from
-                       the state 'state' before we stop performing moves.
-        - `to_skip`: a list of agent's id whose moves have no importance
-                     for pacman for the rest of this branch.
-
-        Return:
-        -------
-        - a pair whose first element is the heuristic value of 'state'
-          and whose second is the best action pacman can do according
-          to expectimax algorithm if pacman is the next agent to play,
-          None if the next agent to play is a ghost.
+        This method looks to predict the ghost type in the case of rpicky based
+        on previous moves done by the ghost
+        :param move: Directions move done
+        :param g_pos: ghost positional information
+        :return:
         """
-        agent = agent % state.getNumAgents()
-
-        if max_depth == 0 or state.isWin() or state.isLose():
-            return (self.evaluation(state),None)
-
-        #If pacman plays:
-        if agent == 0:
-            return self.pacman(state, agent, max_depth,copy.deepcopy(to_skip))
-        #If a ghost plays:
-        else:
-            # If the ghost is too far from pacman in this branch of the tree, skip it:
-            if agent in to_skip:
-                return self.expectimax(state, agent+1, max_depth-1,
-                                       copy.deepcopy(to_skip))
-
-            ghost_pos = state.getGhostPosition(agent)
-            pos_pacman = state.getPacmanPosition()
-            dist = util.manhattanDistance(ghost_pos, pos_pacman)
-
-            # If the ghost is too far from pacman, we will not consider
-            # it in any of the child states:
-            if dist > self.min_ghost_dist:
-                new_to_skip = copy.deepcopy(to_skip)
-                new_to_skip.append(agent)
-                return self.expectimax(state, agent+1, max_depth-1,
-                                       new_to_skip)
-            return self.ghost(state, agent, max_depth, copy.deepcopy(to_skip))
-
-
-    def pacman(self, state, agent, max_depth, to_skip):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of pacman (0), which should play next.
-        - `max_depth`: The number of agents'moves that can be performed from
-                       the state 'state' before we stop performing moves.
-        - `to_skip`: a list of agent's id whose moves have no importance
-                     for pacman for the rest of this branch.
-
-        Return:
-        -------
-        - a pair whose first element is the heuristic value of 'state'
-          and whose second is the best action pacman can do according
-          to expectimax algorithm.
-        """
-        actions = state.getLegalPacmanActions()
-        best_value = -inf
-        best_action = None
-        for action in actions:
-            if action == Directions.STOP :
+        cell = self.graph.nodes_array[self.graph.posX][self.graph.posY]
+        start = cell.getNeighborByDirection(move)
+        eM = ExpectMiniMax(
+            self.graph,
+            start,
+            None,
+            self.g_pattern,
+            None,
+            0)
+        patterns = [eM.ghost_cc_left, eM.ghost_greedy, eM.ghost_randy]
+        if start.has_capsule:
+            return
+        for i, (x, y, _, (scared, _), _, _) in enumerate(g_pos):
+            if scared > 0:
                 continue
-            child = state.generatePacmanSuccessor(action)
-            (x,y) = child.getPacmanPosition()
-            if max_depth == self.max_depth:
-                # Change the curren first pacman action:
-                self.first_pacman_move = action
-            value = self.expectimax(child, agent+1, max_depth-1, copy.deepcopy(to_skip) )[0]
-
-            if value > best_value:
-                best_value = value
-                best_action = action
-        return (best_value, best_action)
-
-
-    def ghost(self, state, agent, max_depth, to_skip):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of the agent that should play next, which should not
-                   be the one of pacman.
-        - `max_depth`: The number of agents'moves that can be performed from
-                       the state 'state' before we stop performing moves.
-        - `to_skip`: a list of agent's id whose moves have no importance
-                     for pacman for the rest of this branch.
-
-        Return:
-        -------
-        - a pair whose first element is the heuristic value of 'state'
-          and whose second is None.
-        """
-        actions = state.getLegalActions(agent)
-        probabilities = self.probabilities(state, agent, actions, max_depth)
-        i = 0
-        mean_value = 0
-        for action in actions:
-
-            if probabilities[i] == 0:
-                i+=1
-                continue
-            child = state.generateSuccessor(agent, action)
-            value = self.expectimax(child, agent+1, max_depth-1, copy.deepcopy(to_skip) )[0]
-            mean_value += value * probabilities[i]
-            i+=1
-        return (mean_value, None)
-
-
-    def evaluation(self, state):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        Return:
-        -------
-        - a heuristic value evaluating how good the current state is.
-        """
-        pos = state.getPacmanPosition()
-        game_score = state.getScore()
-
-        if state.isLose() or state.isWin():
-            return state.getScore()
-
-        # food distance
-        food_list = state.getFood().asList()
-        num_food = len(food_list)
-        dist_closest_food = min(map(lambda x: util.manhattanDistance(pos, x), food_list))
-
-        numberOfCapsulesLeft = len(state.getCapsules())
-
-        # active ghosts are ghosts that aren't scared.
-        scared_ghosts = []
-        not_scared_ghosts = []
-        for ghost in state.getGhostStates():
-            if not ghost.scaredTimer:
-                not_scared_ghosts.append(ghost)
-            else:
-                scared_ghosts.append(ghost)
-
-        distances_ghost = dist_closest_scared_ghost = distances_active_ghosts = 0
-
-        if not_scared_ghosts:
-            distances_ghost = [ util.manhattanDistance(pos, curr_ghost.getPosition()) for curr_ghost in not_scared_ghosts]
-            distances_active_ghosts = sum([ 1./dist for dist in distances_ghost ])
-
-        if scared_ghosts:
-            dist_closest_scared_ghost = min(map(lambda g: util.manhattanDistance(pos, g.getPosition()), scared_ghosts))
-        else:
-            dist_closest_scared_ghost = 0
-
-
-        score = -0.5 * dist_closest_food + \
-                  10    * distances_active_ghosts + \
-                  -20    * dist_closest_scared_ghost + \
-                  -10 * numberOfCapsulesLeft + \
-                  +20    * (1./sqrt(num_food)) +\
-                  +1    * game_score
-
-        return score
-
-
-    def probabilities(self, state, agent, actions, max_depth):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of the agent that should play next
-        - `actions`: the possible actions of the agent 'agent'
-        - `max_depth`: The number of agents'moves that can be performed from
-                       this state before we stop performing moves.
-
-        Return:
-        -------
-        - a list of probabilities 'probas' such that probas[i] is the
-          probability that the ith action of 'actions' will be played by
-          the agent when it will play next according to our beliefs about
-          the agent (pattern, and past evidences if pattern is rpicky).
-          Updates self.prob_prec_move if we are in the first round
-          (ie if an agent has not yet played twice during the
-          current expectimax)
-        """
-
-
-        # Get the precedent direction of the agent to handle
-        # the go-back interdiction
-        ghost = state.getGhostState(agent)
-        prec_action = ghost.getDirection()
-
-        # If only one action possible, we can do it, even if it is turning around:
-        if len(actions) == 1:
-            probas = [1]
-            # If rpickyghosts we must still update dictionnaries:
-            if self.g_pattern == 3:
-                if self.max_depth-max_depth < state.getNumAgents():
-                    prob_lefty = prob_greedy = prob_randy = probas
-                    self.prob_prec_move[self.first_pacman_move][agent] = (state.getGhostPosition(agent),
-                                       agent,
-                                       actions,
-                                       (prob_lefty, prob_greedy, prob_randy))
-
-        # If leftyghost:
-        elif self.g_pattern == 0:
-            probas = self.probaLefty(state, agent, actions, prec_action )
-
-        # If greedyghost:
-        elif self.g_pattern == 1:
-            probas = self.probaGreedy(state, agent, actions, prec_action )
-
-        # If randyghost:
-        elif self.g_pattern == 2:
-            probas = self.probaRandy(state, agent, actions, prec_action )
-
-        # If unknown pattern:
-        else:
-
-            prob_lefty = self.probaLefty(state, agent, actions, prec_action )
-            prob_greedy = self.probaGreedy(state, agent, actions, prec_action )
-            prob_randy = self.probaRandy(state, agent, actions, prec_action )
-            prob = self.prob_patt[agent]
-
-            # Keep the posibles actions and their probabilites if we are at
-            # the first turn in order to be able to figure out
-            # the followed pattern:
-            if self.max_depth-max_depth < state.getNumAgents():
-                self.prob_prec_move[self.first_pacman_move][agent] = (state.getGhostPosition(agent),
-                                   agent,
-                                   actions,
-                                   (prob_lefty, prob_greedy, prob_randy))
-            probas = [ prob[0]*l + prob[1]*g
-                      + prob[2]*r for l,g,r
-                      in zip(prob_lefty, prob_greedy, prob_randy)]
-
-        return probas
-
-
-    def probaLefty(self, state, agent, actions, prec_action ):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of the agent that should play next
-        - `actions`: the possible actions of the agent 'agent'
-        - `prec_action`: the action that was played by the agent 'agent'
-                         in the precedent move.
-
-        Return:
-        -------
-        - a list of probabilities 'probas' such that probas[i] is the
-          probability that the ith action of 'actions' will be played by
-          the agent when it will play next if the agent follows the lefty
-          pattern.
-        """
-        probas = [0] * len(actions)
-        direction = Directions.WEST
-
-        while True:
-            if direction in actions and direction != Directions.REVERSE[prec_action]:
-                probas[actions.index(direction)] = 1
-                return probas
-            else:
-                direction = Directions.LEFT[direction]
-                if direction == Directions.WEST:
-                    direction = Directions.STOP
-
-    def probaGreedy(self, state, agent, actions, prec_action ):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of the agent that should play next
-        - `actions`: the possible actions of the agent 'agent'
-        - `prec_action`: the action that was played by the agent 'agent'
-                         in the precedent move.
-
-        Return:
-        -------
-        - a list of probabilities 'probas' such that probas[i] is the
-          probability that the ith action of 'actions' will be played by
-          the agent when it will play next if the agent follows the greedy
-          pattern.
-        """
-        probas = [0] * len(actions)
-        pos_pacman = state.getPacmanPosition()
-        pos_ghost = state.getGhostPosition(agent)
-
-        list_dist = [0] * len(actions)
-        ghost_state = state.getGhostState(agent)
-        is_scared = ghost_state.scaredTimer > 0
-
-        if is_scared:
-            comparator = lambda x,y: x > y
-            best_dist = -inf
-            speed = 0.5
-        else:
-            comparator = lambda x,y: x < y
-            best_dist = inf
-            speed = 1
-        i=0
-
-        for action in actions:
-
-            direction = Actions._directions[action]
-            displacement = tuple(x*speed for x in direction)
-            next_pos_ghost = (pos_ghost[0] + displacement[0], pos_ghost[1] + displacement[1])
-
-
-            dist = util.manhattanDistance(next_pos_ghost, pos_pacman)
-            list_dist[i] = dist
-            i+=1
-            if comparator(dist,best_dist) and action != Directions.REVERSE[prec_action]:
-                best_dist = dist
-
-        best_actions = [ action for action,
-                        distance in zip(actions, list_dist)
-                        if distance == best_dist]
-        nb_best = len(best_actions)
-        for action in best_actions:
-            probas[actions.index(action)] = 1/nb_best
-        return probas
-
-    def probaRandy(self, state, agent, actions, prec_action ):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `agent`: the id of the agent that should play next
-        - `actions`: the possible actions of the agent 'agent'
-        - `prec_action`: the action that was played by the agent 'agent'
-                         in the precedent move.
-
-        Return:
-        -------
-        - a list of probabilities 'probas' such that probas[i] is the
-          probability that the ith action of 'actions' will be played by
-          the agent when it will play next if the agent follows the randy
-          pattern.
-        """
-        nb_actions = len(actions)
-        probas = [0] * nb_actions
-
-        for action in actions:
-            probas[actions.index(action)] = 1/nb_actions
-
-        prob_lefty = self.probaLefty(state, agent, actions, prec_action )
-        prob_greedy = self.probaGreedy(state, agent, actions, prec_action )
-
-        probas = [ 0.25*l + 0.5*g + 0.25*r for l,g,r
-                  in zip(prob_lefty, prob_greedy, probas)]
-        return probas
-
-    def ghostFar(self,state):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-
-        Return:
-        -------
-        - True if all the ghosts are further from pacman than
-          self.min_ghost_dist, False otherwise.
-        """
-        pos_pacman = state.getPacmanPosition()
-        num_agents = state.getNumAgents()
-        for ghost in range(1,num_agents):
-            ghost_pos = state.getGhostPosition(ghost)
-            dist = util.manhattanDistance(ghost_pos, pos_pacman)
-            if dist < self.min_ghost_dist:
-                return False
-        return True
+            # only compute for undetermined and uneaten ghosts
+            if (start.i, start.j) != (x, y):
+                if len(np.nonzero(self.g_patterns_prob[i, :])[0]) > 1:
+                    self.g_pattern_predict[i] = {}
+                    for j, pattern in enumerate(patterns):
+                        if self.g_patterns_prob[i, j]:
+                            predict = {(x1, y1): prob
+                                       for prob, (x1, y1, _, _, _, _)
+                                       in pattern(start, i, g_pos)}
+                            self.g_pattern_predict[i][j] = predict
+                elif i not in self.known:
+                    print("ghost {} is {}".format(
+                        i, self.g_patterns_prob[i, :]))
+                    if not self.g_patterns_prob[i,
+                                                2] and self.depth < self.max_d:
+                        self.depth += 1
+                    self.known[i] = True

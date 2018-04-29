@@ -1,12 +1,13 @@
 from pacman import Directions
 from game import Agent
-import util
-from math import inf
+import sys
 # XXX: You should complete this class for Step 1
+# apparently in 2D arrays containing the map, up/down are reversed
+from search import SearchProblemData, astar, dist, aStarHeuristic, Graph
 
 
 class Agentsearch(Agent):
-    def __init__(self, index=0, time_eater=40, g_pattern=-1, ghost_call = False):
+    def __init__(self, index=0, time_eater=40, g_pattern=-1):
         """
         Arguments:
         ----------
@@ -17,13 +18,13 @@ class Agentsearch(Agent):
         - `g_pattern`: Ghosts' pattern in-game. See agentghost.py.
                        Not useful in this class, value does not matter
         """
-        self.actions=[]
-        self.index=-1
-        self.dead_ends={}   # self.dead_ends[i][0] : dead ends with food
-                            # self.dead_ends[i][1] : supposed no dead ends
-        self.enable_subopt = True
-        self.ghost_call = ghost_call
-        pass
+        self.moves = []
+        self.graph = None
+        super().__init__(index)
+
+    def reset(self):
+        self.moves = []
+        self.graph = None
 
     def getAction(self, state):
         """
@@ -36,294 +37,78 @@ class Agentsearch(Agent):
         -------
         - A legal move as defined game.Directions.
         """
-
-        if self.ghost_call:
-            self.enable_subopt = True
-            self.actions = []
-            self.index = -1
-        elif state.getNumFood()>25:
-            self.enable_subopt = True
+        if self.graph is None:
+            self.graph = Graph(state)
         else:
-            self.enable_subopt = False
-        
-        self.index=self.index+1
-    
-        if self.index == len(self.actions):
-            self.index = 0
-            self.actions = self.a_star(state)
+            self.graph.update_graph(state)
 
-        
-        return self.actions[self.index]
-    
-    
-    def heuristic1(self,state):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        Return:
-        -------
-        - The number of foods in state 'state'
-        """
-        return state.getNumFood()
-    
-        
-    def heuristic2(self,pos_pac,foods): 
-        """
-        Parameters:
-        -----------
-        - `pos_pac`: a position
-        - `foods`: a list of positions
+        if len(self.moves) == 0:
 
-        Return:
-        -------
-        - The smallest manhattan distance between 'pos_pac' 
-          and the positions in 'foods'
-        """
-        smallest_dist = inf
-        for food in foods:
-            new_dist = util.manhattanDistance(pos_pac, food)
-            if new_dist < smallest_dist :
-                smallest_dist = new_dist
-        return smallest_dist
-    
-    
-    def a_star(self, state):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        Return:
-        -------
-        - The best set of actions according to astar algorithm, using 
-          heuristic2 as heuristic if self.enable_subopt is true, 
-          using heuristic1 otherwise.
-        """
-        frontier = util.PriorityQueue()
-        frontier.push((state,Directions.STOP), 0 + self.heuristic1(state) )
-        # visited_nodes[node] is True if the node has been visited, 
-        # a pair(actions,actions_score) if the parent of the node 
-        # has been visited, None otherwise:
-        visited_nodes = {}
-        # Passing again at the same position without having eaten any dot makes no sense:
-        key = (state.getFood(), state.getPacmanPosition())
-        visited_nodes[key] = ([],0,0)
+            nodes_list = self.graph.nodes_list
+            nodes_array = self.graph.nodes_array
+            # start node is the node where pacman is positioned
+            start = nodes_array[self.graph.posX][self.graph.posY]
 
-        while not frontier.isEmpty():
-            
-            # Get the state with the lower score:
-            (curr_state, prec_action) = frontier.pop()
-            
-            key = (curr_state.getFood(), curr_state.getPacmanPosition())
-            
-            # If the state has alrady been visited we go to the next state:
-            if key in visited_nodes and visited_nodes[key]==True:
-                continue
-            
-            # If we are in the suboptimal mode and if we have eaten food:
-            if self.enable_subopt and visited_nodes[key][2]>0:
-                    return visited_nodes[key][0]
-            # If what we popped is the goal, we can return the sequence of moves:
-            if curr_state.getNumFood() == 0:
-                return visited_nodes[key][0]
-   
-            
-            (prec_actions, prec_actions_cost, prec_num_eat_food) = visited_nodes[key]
-            actions = curr_state.getLegalPacmanActions()
-            
-            # If we can only go back or continue in the path:
-            if len(actions) == 3:
-                not_reverse = []
-                for action in actions:
-                    if action == Directions.REVERSE[prec_action] or action == Directions.STOP:
-                        continue
-                    else:
-                        not_reverse.append(action)
-                    
-                # If we have food when not going back, we do not want to go back
-                # and so do not even consider it:
-                if self.hasFood(curr_state, not_reverse):
-                    actions = not_reverse
-        
-            # If we have an intersection, select the dead end if possible:
-            elif len(actions) > 3:  
-                actions =  self.find_dead_ends(curr_state, actions, prec_action)
+            # this method finds the 2 food nodes furthest from each other and
+            # sends pacman to the closest of the 2
+            food_nodes = []
+            for node in nodes_list:
+                if node.has_food:
+                    food_nodes.append(node)
+            end = None
+            middle = None
+            distance = - 1
+            for i in range(0, len(food_nodes)):
+                node1 = food_nodes[i]
+                for j in range(i, len(food_nodes)):
+                    node2 = food_nodes[j]
+                    if distance < dist(node1, node2):
+                        end = node1
+                        middle = node2
+                        distance = dist(node1, node2)
 
-            for action in actions:
-                if action == Directions.STOP : 
-                    continue
-                
-                # If pacman wants to go in the reverse direction while there is still food just in front of him:
-                if action == Directions.REVERSE[prec_action] and self.hasFood(curr_state, prec_action) :
-                    continue
-                
-                child = curr_state.generatePacmanSuccessor(action)
-                key_child = (child.getFood(), child.getPacmanPosition())
-                # If the state has alrady been visited we go to the next state:
-                if key_child in visited_nodes and visited_nodes[key_child]==True:
-                    continue
-                
-                action_cost = self.getCostOfAction(curr_state, action)
-                num_eat_food = prec_num_eat_food + int( self.hasFood(curr_state, action) )
-                #If suboptimal:
-                if self.enable_subopt:
-                    foods_pos = child.getFood().asList()
-                    score = action_cost + prec_actions_cost + self.heuristic2(child.getPacmanPosition(),foods_pos)
-                else:
-                    score = action_cost + prec_actions_cost + self.heuristic1(child)
+            if dist(middle, start) > dist(end, start):
+                middle, end = end, middle
 
-                visited_nodes[key_child] = (prec_actions+
-                             [child.getPacmanState().getDirection()], 
-                             action_cost+prec_actions_cost, num_eat_food)
-                frontier.push( (child,action), score)
-                
-            # Remember that the state has been visited:
-            visited_nodes[key] = True
-        
-        #Should never happen
-        return [state.getLegalPacmanActions()[1]]
-        
-    def getCostOfAction(self, state, action):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `action`: a pacman action
+            # this method tries to go to the closest node from pacman
+            distance = sys.maxsize
+            end2 = None
+            for node in nodes_list:
+                if node.has_food and node is not start and self.graph.dist(
+                        node) < distance:
+                    distance = self.graph.dist(node)
+                    end2 = node
 
-        Return:
-        -------
-        - 1 if pacman will eat a food by performing the action 'action', 
-          2 otherwise
-        """
-        if self.hasFood(state, action):
-            return 1
-        # If there is no food in the place we go:
-        return 2
-            
-    def hasFood(self,state,action):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `action`: a pacman action
+            # since we dont recalculate the path at each iteration, we
+            # combine both methods
+            # If there's a really close point compared to the middle point
+            # we go there instead
+            # This helps to avoid skipping points on one side then going to
+            # another and forcing pacman
+            # to go all the way back
+            if dist(end2, start) * 3 < dist(middle, start):
+                middle = end2
+            cell = self.graph.nodes_array[self.graph.posX][self.graph.posY]
+            if middle is not None:
+                # look for a path to end node. It ends early if it finds food
+                # closer than the end node
+                problem = SearchProblemData(nodes_list, start, middle)
+                path, _ = astar(problem, aStarHeuristic)
+                # path = dfs(problem)
+                if path is not None:
+                    self.moves = path
+                    ret = path[0]
+                    del self.moves[0]
+                    negb_cell = cell.getNeighborByDirection(ret)
+                    if self.graph.nb_food == 1 and negb_cell.has_food:
+                        self.reset()
+                    return ret
 
-        Return:
-        -------
-        - True if pacman will eat a food by performing the action 'action', 
-          False otherwise
-        """
-        legal = state.getLegalPacmanActions()
-        if action in legal: 
-            next_state = state.generatePacmanSuccessor(action)
-            (x, y) = next_state.getPacmanPosition()
-            if state.hasFood(x, y):
-                return True
-        return False
-
-    
-    def find_dead_ends(self,curr_state, actions, prec_action):
-        """
-        Parameters:
-        -----------
-        - `curr_state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `actions`: the action that pacman will play next
-        - `prec_action`: True if at least one food has been found while the past 
-                  exploring of this potential dead end, false otherwise.
-
-        Return:
-        -------
-        - The set of actions that are worth to consider, by keeping only those 
-          that lead to dead ends with food if any, or by deleting those that
-          lead to a dead end without food otherwise.
-        """
-        # If we have already analyzed this intersection:
-        pos = curr_state.getPacmanPosition()
-        
-        # Else, analyze it:        
-        if not( pos  in self.dead_ends):
-            i=0
-            self.dead_ends[pos] =[[],[]]
-            for action in actions:
-                i=i+1
-                if action == Directions.REVERSE[prec_action]:
-                    self.dead_ends[pos][1].append(action)
-                    continue
-                elif action == Directions.STOP:
-                    continue
-                (first_food, dead_end) = self.is_dead_end(curr_state, action, False)
-                # If it is a dead end containing food, go into it:
-                if dead_end == (True, True):
-                    self.dead_ends[pos][0].append((first_food,action))
-                # Else, consider only what s not a dead end:    
-                elif not dead_end :
-                    self.dead_ends[pos][1].append(action)
-                    
-        # If we are suboptimal and we have already eaten some food, 
-        # return path found until this intersection without dead end containing food:            
-        if len(self.dead_ends[pos][0]) == 0:
-            actions = self.dead_ends[pos][1]
-
+            return Directions.STOP
         else:
-            food_dead_ends = self.dead_ends[pos][0]
-            actions = []
-            for f_d_e in food_dead_ends:
-                (x,y) = f_d_e[0]
-                if curr_state.hasFood(x,y) :
-                    actions = [f_d_e[1]]
-                    break
-            if actions == []:
-                actions = self.dead_ends[pos][1]
-                 
-        return actions
-                
-    def is_dead_end(self, state, action_todo, food):
-        """
-        Parameters:
-        -----------
-        - `state`: the current game state as defined pacman.GameState.
-                   (you are free to use the full GameState interface.)
-        - `action_todo`: the action that pacman will play next
-        - `food`: True if at least one food has been found while the past 
-                  exploring of this potential dead end, false otherwise.
-
-        Return:
-        -------
-        - (None,False) if 'action_todo' does not lead to a dead end or leads 
-                       to a dead end with several branches.
-          (pos,(True, fd)) if 'action_todo' leads to a dead end. With fd
-          being true if there is a food on the rest of the path or if 'food' 
-          is True, and with pos being the position of the food in the remaining
-          path if 'food' is false,  None otherwise.
-        """
-        if self.hasFood(state, action_todo):
-            food = True
-        next_state = state.generatePacmanSuccessor(action_todo)
-        pos = next_state.getPacmanPosition()
-        actions = next_state.getLegalPacmanActions()
-        if len(actions) == 3:            
-            for action in actions:
-                    if action == Directions.REVERSE[action_todo] or action == Directions.STOP:
-                        continue
-                    else:
-                        not_reverse = action
-                        break
-            if food: 
-                response = self.is_dead_end(next_state, not_reverse, food)
-                return (pos, response[1])
-            else:
-                return self.is_dead_end(next_state, not_reverse, food)                    
-                    
-        elif len(actions) == 2:
-            # It is a dead end
-            if food:
-                return (pos,(True, food)) 
-            else:
-                return (None,(True, food)) 
-        else:
-            # Either is not a dead end or is a dead end with several branches:
-            return (None,False)      
+            ret = self.moves[0]
+            del self.moves[0]
+            negb_cell = cell.getNeighborByDirection(ret)
+            if self.graph.nb_food == 1 and negb_cell.has_food:
+                self.reset()
+            return ret
