@@ -53,7 +53,7 @@ class AC_Network():
 
             hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.elu)
 
-            for i in range(20):
+            for i in range(10):
                 hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
             #Recurrent network for temporal dependencies

@@ -101,11 +101,17 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                 for agents in parallel_agents:
                     agents[i].startLearning()
                 curr_round_training = round_training if i else max(round_training,round_training*nb_ghosts)
+                with open('save_scores.txt','a') as f:
+                    f.write('agent '+str(i)+'\n')
+
                 for j in range(curr_round_training):
                     sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
                     sys.stdout.flush()
 
-                    pool.map(runGames,args)
+                    score = sum([game[0].state.data.score for game in pool.map(runGames,args)
+                        if len(game)!=0])
+                    with open('save_scores.txt','a') as f:
+                        f.write(str(score)+'\n')
 
                 for agents in parallel_agents:
                     agents[i].stopLearning()
