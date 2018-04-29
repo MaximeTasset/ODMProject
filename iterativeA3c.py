@@ -34,7 +34,7 @@ def runGames(kargs):
     return pacman.runGames(**kargs)
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,num_parallel=1,nb_cores=-1, folder='videos'):
+                 round_training=5,num_parallel=1,nb_cores=-1, folder='videos',layer='boxSearch'):
 
     tf.reset_default_graph()
     pool = ThreadPool(num_parallel)
@@ -53,7 +53,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
         display = graphicsDisplay.PacmanGraphics(1.0, frameTime=0.1)
 
 
-    layout_instance = layout.getLayout('mediumClassic')
+    layout_instance = layout.getLayout(layer)
     nb_ghosts = min(len(layout_instance.agentPositions)-1,nb_ghosts)
 
     # Get the length of a state:
@@ -146,6 +146,6 @@ def makeGif(folder='videos',filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=0,round_training=100,display_mode='graphics',num_parallel=4,
+  master_nwk = iterativeA3c(nb_ghosts=0,round_training=5,display_mode='graphics',num_parallel=4,
                nb_cores=max(1,psutil.cpu_count()-1),folder='videos')
 #  max(1,psutil.cpu_count())

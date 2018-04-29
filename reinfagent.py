@@ -74,6 +74,8 @@ class ReinfAgent(GhostAgent,Agent):
 #    def diminueEpsilon(self):
 #        if self.min_epsilon != self.epsilon:
 #            self.epsilon = max(self.min_epsilon,self.epsilon-dF(self.epsilon))
+    def registerInitialState(self,state):
+        self.sess.run(self.update_local_ops)
 
     def getDistribution(self, state):
         # Ghost function
@@ -89,6 +91,7 @@ class ReinfAgent(GhostAgent,Agent):
     def getAction(self, state):
         # Pacman function
         with self.sess.as_default(), self.sess.graph.as_default():
+
             legalActions = state.getLegalActions(self.index)
             s = getDataState(state)
             # If we learn and epsilon greedy, make random move
@@ -115,7 +118,6 @@ class ReinfAgent(GhostAgent,Agent):
                                     feed_dict={self.local_AC.inputs:[s],
                                     self.local_AC.state_in[0]:self.rnn_state[0],
                                     self.local_AC.state_in[1]:self.rnn_state[1]})
-
                 #move = np.random.choice(a_dist[0],p=a_dist[0])
                 #move = DIRECTION[np.argmax(a_dist == move)]
 
@@ -200,6 +202,7 @@ class ReinfAgent(GhostAgent,Agent):
                             self.local_AC.state_in[1]:self.rnn_state[1]})[0,0]
             self.train(self.one_step_transistions,self.sess,self.gamma,v1)
             self.one_step_transistions = []
+            self.sess.run(self.update_local_ops)
 
         if not final:
           for i,m in DIRECTION.items():
@@ -211,40 +214,41 @@ class ReinfAgent(GhostAgent,Agent):
           self.prev = None
 
     def train(self,rollout,sess,gamma,bootstrap_value):
-        if not len(rollout):
-            return
-        rollout = np.array(rollout)
-        observations = rollout[:,0]
-        actions = rollout[:,1]
-        rewards = rollout[:,2]
-        next_observations = rollout[:,3]
-        values = rollout[:,4]
+        with self.sess.as_default(), self.sess.graph.as_default():
+            if not len(rollout):
+                return
+            rollout = np.array(rollout)
+            observations = rollout[:,0]
+            actions = rollout[:,1]
+            rewards = rollout[:,2]
+            next_observations = rollout[:,3]
+            values = rollout[:,4]
 
-        # Here we take the rewards and values from the rollout, and use them to
-        # generate the advantage and discounted returns.
-        # The advantage function uses "Generalized Advantage Estimation"
-        self.rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
-        discounted_rewards = discount(self.rewards_plus,gamma)[:-1]
-        self.value_plus = np.asarray(values.tolist() + [bootstrap_value])
-        advantages = rewards + gamma * self.value_plus[1:] - self.value_plus[:-1]
-        advantages = discount(advantages,gamma)
+            # Here we take the rewards and values from the rollout, and use them to
+            # generate the advantage and discounted returns.
+            # The advantage function uses "Generalized Advantage Estimation"
+            self.rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
+            discounted_rewards = discount(self.rewards_plus,gamma)[:-1]
+            self.value_plus = np.asarray(values.tolist() + [bootstrap_value])
+            advantages = rewards + gamma * self.value_plus[1:] - self.value_plus[:-1]
+            advantages = discount(advantages,gamma)
 
-        # Update the global network using gradients from loss
-        # Generate network statistics to periodically save
-        feed_dict = {self.local_AC.target_v:discounted_rewards,
-            self.local_AC.inputs:np.vstack(observations),
-            self.local_AC.actions:actions,
-            self.local_AC.advantages:advantages,
-            self.local_AC.state_in[0]:self.batch_rnn_state[0],
-            self.local_AC.state_in[1]:self.batch_rnn_state[1]}
-        v_l,p_l,e_l,g_n,v_n, self.batch_rnn_state,_ = sess.run([self.local_AC.value_loss,
-            self.local_AC.policy_loss,
-            self.local_AC.entropy,
-            self.local_AC.grad_norms,
-            self.local_AC.var_norms,
-            self.local_AC.state_out,
-            self.local_AC.apply_grads],
-            feed_dict=feed_dict)
+            # Update the global network using gradients from loss
+            # Generate network statistics to periodically save
+            feed_dict = {self.local_AC.target_v:discounted_rewards,
+                self.local_AC.inputs:np.vstack(observations),
+                self.local_AC.actions:actions,
+                self.local_AC.advantages:advantages,
+                self.local_AC.state_in[0]:self.batch_rnn_state[0],
+                self.local_AC.state_in[1]:self.batch_rnn_state[1]}
+            v_l,p_l,e_l,g_n,v_n, self.batch_rnn_state,_ = sess.run([self.local_AC.value_loss,
+                self.local_AC.policy_loss,
+                self.local_AC.entropy,
+                self.local_AC.grad_norms,
+                self.local_AC.var_norms,
+                self.local_AC.state_out,
+                self.local_AC.apply_grads],
+                feed_dict=feed_dict)
 
 
 
