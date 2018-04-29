@@ -61,7 +61,7 @@ class Agentghost(Agent):
         # If there are no ghosts, use the search agent normally:
         if num_agents == 1:
             if self.first_call:
-                self.agentsearch = agentsearch134450131558.Agentsearch134450131558(ghost_call = False)
+                self.agentsearch = agentsearch.Agentsearch(ghost_call = False)
             return self.agentsearch.getAction(state)
         # If ghost far enough, call agentsearch:
         if self.ghostFar(state):

@@ -193,7 +193,7 @@ class ReinfAgent(GhostAgent,Agent):
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
         if len(self.one_step_transistions) == 30 or final:
-            self.diminueEpsilon()
+#            self.diminueEpsilon()
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
