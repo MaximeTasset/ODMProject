@@ -145,7 +145,7 @@ class ReinfAgent(GhostAgent,Agent):
 
     def learnFromPast(self,used_core=-1):
         if len(self.one_step_transistions):
-            self.diminueEpsilon()
+
             self.learning_algo = computeFittedQIteration(self.one_step_transistions,
                                                          N=60,
                                                          mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
@@ -173,6 +173,7 @@ class ReinfAgent(GhostAgent,Agent):
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
         if len(self.one_step_transistions) == 30 or final:
+            self.diminueEpsilon()
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
