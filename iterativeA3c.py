@@ -146,6 +146,6 @@ def makeGif(folder='videos',filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=2,round_training=500,display_mode='graphics',num_parallel=4,
+  master_nwk = iterativeA3c(nb_ghosts=2,round_training=300,display_mode='graphics',num_parallel=4,
                nb_cores=max(1,psutil.cpu_count()-1),folder='videos')
 #  max(1,psutil.cpu_count())
