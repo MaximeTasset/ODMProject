@@ -18,11 +18,17 @@ from multiprocessing.pool import ThreadPool
 import psutil
 import os
 import imageio as io
+from tensorflow.python.client import device_lib
 
-# Assume that you have 8GB of GPU memory and want to allocate ~6GB:
-#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
-
-#sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+    # Assume that you have 8GB of GPU memory and want to allocate ~6GB:
+GPU = False
+for d in device_lib.list_local_devices():
+    if d.device_type == 'GPU':
+        GPU = True
+        break
+if GPU:
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
+    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
 def runGames(kargs):
     return pacman.runGames(**kargs)

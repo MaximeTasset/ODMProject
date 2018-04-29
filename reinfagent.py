@@ -21,18 +21,19 @@ import sys
 import tensorflow as tf
 import scipy.signal
 
-from game import Directions
-
 DIRECTION = { 0 : Directions.NORTH,
               1 : Directions.SOUTH,
               2 : Directions.EAST,
               3 : Directions.WEST,
               4 : Directions.STOP}
 
+def dF(val):
+    return 0.005
+
 class ReinfAgent(GhostAgent,Agent):
 
     def __init__(self,optim, global_episodes,sess,s_size,a_size,grid_size, index=0,
-                 name="worker",global_scope='global',epsilon=0.1,gamma=0.95):
+                 name="worker",global_scope='global',epsilon=1,gamma=0.95,min_epsilon=0.01):
 
         self.lastMove = Directions.STOP
         self.index = index
@@ -60,6 +61,10 @@ class ReinfAgent(GhostAgent,Agent):
         self.update_local_ops = update_target_graph(self.global_scope,self.name)
         self.rnn_state = self.local_AC.state_init
         self.batch_rnn_state = self.rnn_state
+
+    def diminueEpsilon(self):
+        if self.min_epsilon != self.epsilon:
+            self.epsilon = max(self.min_epsilon,self.epsilon-dF(self.epsilon))
 
     def getDistribution(self, state):
         # Ghost function
@@ -140,6 +145,7 @@ class ReinfAgent(GhostAgent,Agent):
 
     def learnFromPast(self,used_core=-1):
         if len(self.one_step_transistions):
+            self.diminueEpsilon()
             self.learning_algo = computeFittedQIteration(self.one_step_transistions,
                                                          N=60,
                                                          mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
