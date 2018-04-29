@@ -20,15 +20,15 @@ import os
 import imageio as io
 
 # Assume that you have 8GB of GPU memory and want to allocate ~6GB:
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
+#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
 
-sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+#sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
 def runGames(kargs):
     return pacman.runGames(**kargs)
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,num_parallel=1,nb_cores=-1):
+                 round_training=5,num_parallel=1,nb_cores=-1, folder='videos'):
 
     tf.reset_default_graph()
     pool = ThreadPool(num_parallel)
@@ -115,7 +115,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     else:
                         consec_wins = min(-1,consec_wins-1)
 
-                make_gif('agent_{}_nbrounds_{}.mp4'.format(i,nb_it))
+                make_gif(folder,'agent_{}_nbrounds_{}.mp4'.format(i,nb_it))
                 graphicsDisplay.FRAME_NUMBER = 0
             nb_it += 1
 
@@ -123,8 +123,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     return master_networks
 
 
-def make_gif(filename='movie.mp4'):
-    filename = 'videos/'+filename
+def make_gif(folder='videos',filename='movie.mp4'):
+    filename = folder+'/'+filename
     # The images to use are in subfolder frames of the current folder:
     nb_frames = len(os.listdir(os.getcwd()+"/frames"))
 
@@ -139,6 +139,6 @@ def make_gif(filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  iterativeA3c(nb_ghosts=0,round_training=500,display_mode='graphics',num_parallel=psutil.cpu_count(),
-               nb_cores=max(1,psutil.cpu_count()-1))
+  master_nwk = iterativeA3c(nb_ghosts=0,round_training=100,display_mode='graphics',num_parallel=4,
+               nb_cores=max(1,psutil.cpu_count()-1),folder='videos')
 #  max(1,psutil.cpu_count())

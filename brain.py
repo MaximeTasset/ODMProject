@@ -51,18 +51,18 @@ class AC_Network():
                 kernel_size=tuple([4,4]),stride=tuple([4,4]),padding='VALID')
 
 
-            hidden = slim.fully_connected(slim.flatten(self.conv1),256,activation_fn=tf.nn.elu)
+            hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.elu)
 
-#            hidden = slim.fully_connected(self.inputs,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-#            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-#            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-#            hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-            for i in range(30):
-              hidden = slim.fully_connected(hidden,256,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(self.inputs,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+#            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+            for i in range(10):
+              hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
 
             #Recurrent network for temporal dependencies
-            lstm_cell = tf.contrib.rnn.BasicLSTMCell(256,state_is_tuple=True)
+            lstm_cell = tf.contrib.rnn.BasicLSTMCell(100,state_is_tuple=True)
             c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
             h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
             self.state_init = [c_init, h_init]
@@ -77,7 +77,7 @@ class AC_Network():
                 time_major=False)
             lstm_c, lstm_h = lstm_state
             self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
-            rnn_out = tf.reshape(lstm_outputs, [-1, 256])
+            rnn_out = tf.reshape(lstm_outputs, [-1, 100])
 
             #Output layers for policy and value estimations
             self.policy = slim.fully_connected(rnn_out,a_size,
