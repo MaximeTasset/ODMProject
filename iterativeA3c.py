@@ -74,7 +74,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
         parallel_agents = [[ReinfAgent(optims[i],global_episodes[i],sess,
                                        s_size,4 if i else 5,grid_size,index=i,
                                        name="worker_{}_{}".format(i,j),
-                                       global_scope="global_"+str(i))
+                                       global_scope="global_"+str(i),
+                                       round_training=round_training)
                                         for i in range(0,nb_ghosts+1)]
                                         for j in range(num_parallel)]
 

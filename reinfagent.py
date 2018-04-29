@@ -9,6 +9,8 @@ from game import Agent
 from game import Actions
 
 from ghostAgents import GhostAgent
+from greedyghost import Greedyghost
+from agentghost  import Agentghost
 
 from brain import *
 
@@ -33,7 +35,8 @@ def dF(val):
 class ReinfAgent(GhostAgent,Agent):
 
     def __init__(self,optim, global_episodes,sess,s_size,a_size,grid_size, index=0,
-                 name="worker",global_scope='global',epsilon=1,gamma=0.95,min_epsilon=0.01):
+                 name="worker",global_scope='global',round_training=5,gamma=0.95):#,
+#                 epsilon=1,min_epsilon=0.01):
 
         self.lastMove = Directions.STOP
         self.index = index
@@ -41,8 +44,9 @@ class ReinfAgent(GhostAgent,Agent):
 
         self.learning_algo = None
         self.learn = False
-        self.epsilon = epsilon
-        self.min_epsilon = min_epsilon
+#        self.epsilon = epsilon
+#        self.min_epsilon = min_epsilon
+        self.round_training = round_training
         self.prev = None
         self.one_step_transistions = []
         self.opt = tf.train.AdamOptimizer()
@@ -62,10 +66,14 @@ class ReinfAgent(GhostAgent,Agent):
         self.update_local_ops = update_target_graph(self.global_scope,self.name)
         self.rnn_state = self.local_AC.state_init
         self.batch_rnn_state = self.rnn_state
+        if index:
+            self.training_ghost = Greedyghost(index)
+        else:
+            self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
 
-    def diminueEpsilon(self):
-        if self.min_epsilon != self.epsilon:
-            self.epsilon = max(self.min_epsilon,self.epsilon-dF(self.epsilon))
+#    def diminueEpsilon(self):
+#        if self.min_epsilon != self.epsilon:
+#            self.epsilon = max(self.min_epsilon,self.epsilon-dF(self.epsilon))
 
     def getDistribution(self, state):
         # Ghost function
@@ -83,15 +91,24 @@ class ReinfAgent(GhostAgent,Agent):
         with self.sess.as_default(), self.sess.graph.as_default():
             legalActions = state.getLegalActions(self.index)
             s = getDataState(state)
-            # If we don't have learn yet or epsilon greedy, make random move
-            if np.random.uniform() <= self.epsilon:
+            # If we learn and epsilon greedy, make random move
+            if self.learn and self.round_training:
+                if self.index:
+                    dist = self.training_ghost.getDistribution(state)
+                    move = np.random.choice(dist,p=dist)
+                    move = DIRECTION[np.argmax(dist == move)]
+                else:
+                    move = self.training_pacman.getAction(state)
+
+#            if self.learn and np.random.uniform() <= self.epsilon:
                 v = self.sess.run(self.local_AC.value,
                                 feed_dict={self.local_AC.inputs:[s],
                                 self.local_AC.state_in[0]:self.rnn_state[0],
                                 self.local_AC.state_in[1]:self.rnn_state[1]})
-                move = legalActions[np.random.randint(0,len(legalActions))]
-                if Actions.directionToVector(move) == (0,0):
-                    move = legalActions[np.random.randint(0,len(legalActions))]
+#                move = legalActions[np.random.randint(0,len(legalActions))]
+
+#                if Actions.directionToVector(move) == (0,0):
+#                    move = legalActions[np.random.randint(0,len(legalActions))]
             else:
 
                 a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
@@ -154,6 +171,8 @@ class ReinfAgent(GhostAgent,Agent):
     def final(self,final_state):
       with self.sess.as_default(), self.sess.graph.as_default():
           self._saveOneStepTransistion(final_state,None,True)
+          if self.learn and self.round_training:
+            self.round_training -= 1
 
     def _saveOneStepTransistion(self,state,move,final,v=None):
         state_data = getDataState(state)
