@@ -858,8 +858,8 @@ def runGames(
             beQuiet,
             catchExceptions)
         game.run()
-        if not beQuiet:
-            games.append(game)
+#        if not beQuiet:
+        games.append(game)
 
         if record:
             import time

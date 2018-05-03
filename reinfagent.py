@@ -23,11 +23,15 @@ import sys
 import tensorflow as tf
 import scipy.signal
 
-DIRECTION = { 0 : Directions.NORTH,
-              1 : Directions.SOUTH,
-              2 : Directions.EAST,
-              3 : Directions.WEST,
-              4 : Directions.STOP}
+MAX_SIZE =  3
+
+DIRECTION = [ Directions.NORTH,
+              Directions.SOUTH,
+              Directions.EAST,
+              Directions.WEST,
+              Directions.STOP]
+
+
 
 def dF(val):
     return 0.005
@@ -35,17 +39,17 @@ def dF(val):
 class ReinfAgent(GhostAgent,Agent):
 
     def __init__(self,optim, global_episodes,sess,s_size,a_size,grid_size, index=0,
-                 name="worker",global_scope='global',round_training=5,gamma=0.95):#,
-#                 epsilon=1,min_epsilon=0.01):
+                 name="worker",global_scope='global',round_training=5,gamma=0.95,
+                 epsilon=1,min_epsilon=0.01):
 
-        self.lastMove = Directions.STOP
+        self.lastMove = 4
         self.index = index
         self.gamma = gamma
 
         self.learning_algo = None
         self.learn = False
-#        self.epsilon = epsilon
-#        self.min_epsilon = min_epsilon
+        self.epsilon = epsilon
+        self.min_epsilon = min_epsilon
         self.round_training = round_training
         self.prev = None
         self.one_step_transistions = []
@@ -53,7 +57,8 @@ class ReinfAgent(GhostAgent,Agent):
 
         self.name = name
         self.global_scope = global_scope
-
+        with open(self.name+'.txt','w'):
+            pass
         self.optim = optim
         self.global_episodes = global_episodes
         self.sess = sess
@@ -70,10 +75,14 @@ class ReinfAgent(GhostAgent,Agent):
             self.training_ghost = Greedyghost(index)
         else:
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
+        self.count = 0
 
-#    def diminueEpsilon(self):
-#        if self.min_epsilon != self.epsilon:
-#            self.epsilon = max(self.min_epsilon,self.epsilon-dF(self.epsilon))
+
+    def diminueEpsilon(self):
+        if self.min_epsilon != self.epsilon and self.count == 20:
+            self.epsilon = max(self.min_epsilon,self.epsilon-dF(self.epsilon))
+            self.count = 0
+        self.count += 1
     def registerInitialState(self,state):
         self.sess.run(self.update_local_ops)
 
@@ -100,8 +109,8 @@ class ReinfAgent(GhostAgent,Agent):
                     dist = self.training_ghost.getDistribution(state)
                     dist.setdefault(0)
                     dist_p = np.zeros(len(DIRECTION))
-                    for i in DIRECTION:
-                        dist_p[i] = dist[DIRECTION[i]]
+                    for i,d in enumerate(DIRECTION):
+                        dist_p[i] = dist[d]
                     move = np.random.choice(dist_p,p=dist_p)
                     move = DIRECTION[np.argmax(dist_p == move)]
                 else:
@@ -122,43 +131,35 @@ class ReinfAgent(GhostAgent,Agent):
                                     feed_dict={self.local_AC.inputs:[s],
                                     self.local_AC.state_in[0]:self.rnn_state[0],
                                     self.local_AC.state_in[1]:self.rnn_state[1]})
-                #move = np.random.choice(a_dist[0],p=a_dist[0])
-                #move = DIRECTION[np.argmax(a_dist == move)]
 
                 #we remove the illegal move from the distribution
                 a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
                 a_dist = np.array(a_dist)
+
+                #we don't want to go in the opposite direction
+                if not self.index:
+                  a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 2
+
                 a_dist = a_dist / sum(a_dist)
-                move = np.random.choice(a_dist,p=a_dist)
-                move = DIRECTION[np.argmax(a_dist == move)]
-#                sorted_probas = sorted(a_dist)
-#                i = 0
 
-#                move = DIRECTION[a_dist.index(sorted_probas[i])]
-#                print(legalActions)
-#                print('CACA',a_dist,sorted_probas)
-#                a = []
-#                while not move in legalActions:
-#                    move = np.random.choice(a_dist[0],p=a_dist[0])
-#                    move = DIRECTION[np.argmax(a_dist == move)]
-#                    i += 1
-                    #print(move,i)
-#                    try:
-#                        a.append(move)
-#                        move = DIRECTION[a_dist.index(sorted_probas[i])]
-#                    except IndexError:
-#                        print(a_dist,sorted_probas,i,legalActions,a)
-#                        raise IndexError
-#                    if i == 100:
-#                        move = legalActions[np.random.randint(0,len(legalActions))]
-#                        if Actions.directionToVector(move) == (0,0):
-#                            move = legalActions[np.random.randint(0,len(legalActions))]
+#                with open(self.name+'.txt','a') as f:
+#                    f.write('{}:{}\n'.format([st.getPosition() for st in state.data.agentStates],a_dist))
 
+                if np.random.uniform() <= self.epsilon:
+                    move = np.random.choice(a_dist,p=a_dist)
+                    move = DIRECTION[np.argmax(a_dist == move)]
+                else:
+                    move = DIRECTION[np.argmax(a_dist)]
+
+            for i,m in enumerate(DIRECTION):
+                if m == move:
+                  self.lastMove = i
+                  break
 
             if self.learn:
                 self._saveOneStepTransistion(state,move,False,v[0,0])
 
-            return move
+            return v
 
     def startLearning(self):
         self.learn = True
@@ -177,6 +178,7 @@ class ReinfAgent(GhostAgent,Agent):
     def final(self,final_state):
       with self.sess.as_default(), self.sess.graph.as_default():
           self._saveOneStepTransistion(final_state,None,True)
+          self.lastMove = 4
           if self.learn and self.round_training:
             self.round_training -= 1
 
@@ -190,16 +192,19 @@ class ReinfAgent(GhostAgent,Agent):
                 #ghost reward
                 reward = -util.manhattanDistance(state.getGhostPosition(self.index),
                                               state.getPacmanPosition()) - \
-                         1000 * state.isWin() + 10000 * state.isLose()
+                         10000 * state.isWin() + 10000 * state.isLose()
             else:
                 #pacman reward
-                reward = -1 + 1000 * state.isWin() \
-                        -100000 * state.isLose() + abs(state.getNumFood() + self.prev[0].getNumFood()) * 51 + \
+                reward = -10 + 100000 * state.isWin() \
+                        -100000 * state.isLose() + abs(state.getNumFood() - self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
+                if self.name.endswith("0"):
+                    with open(self.name+'.txt','a') as f:
+                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
-        if len(self.one_step_transistions) == 30 or final:
-#            self.diminueEpsilon()
+        if len(self.one_step_transistions) == MAX_SIZE or final:
+            self.diminueEpsilon()
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
@@ -209,10 +214,11 @@ class ReinfAgent(GhostAgent,Agent):
             self.sess.run(self.update_local_ops)
 
         if not final:
-          for i,m in DIRECTION.items():
+          for i,m in enumerate(DIRECTION):
             if m == move:
               move = i
               break
+          self.lastMove = move
           self.prev = (state.deepCopy(),move,state_data,v)
         else:
           self.prev = None
@@ -325,18 +331,18 @@ def getDataState(state):
     food_pos = state.getFood()
     walls_pos = state.getWalls()
     caps_pos = state.getCapsules()
-    nb_agent = len(agent_pos)
 
     data = np.zeros((walls_pos.width,walls_pos.height))
     for i in range(walls_pos.width):
         for j in range(walls_pos.height):
             if (i,j) in agent_pos:
-                data[i,j] = agent_pos.index((i,j)) + 1
+                index_agent = agent_pos.index((i,j))
+                data[i,j] = 10000 if not index_agent  else -index_agent*100
             elif walls_pos[i][j]:
-                data[i,j] = nb_agent + 1
+                data[i,j] = -10
             elif food_pos[i][j]:
-                data[i,j] = nb_agent + 2
+                data[i,j] = 2000
             elif (i,j) in caps_pos:
-                data[i,j] = nb_agent + 3
+                data[i,j] = 3000
     return data.flatten()
 

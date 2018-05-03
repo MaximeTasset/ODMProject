@@ -34,10 +34,10 @@ def runGames(kargs):
     return pacman.runGames(**kargs)
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
 
     tf.reset_default_graph()
-    pool = ThreadPool(num_parallel)
+    pool = ThreadPool(nb_cores)
 #    pool = Pool(num_parallel)
 
     # Choose a display format
@@ -100,7 +100,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                 print("Pacman" if not i else "Ghost {}".format(i))
                 for agents in parallel_agents:
                     agents[i].startLearning()
-                curr_round_training = round_training if i else max(round_training,round_training*nb_ghosts)
+                curr_round_training = rounds if i else max(rounds,rounds*nb_ghosts)
                 with open('save_scores.txt','a') as f:
                     f.write('agent '+str(i)+'\n')
 
@@ -152,6 +152,6 @@ def makeGif(folder='videos',filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=2,round_training=300,display_mode='graphics',num_parallel=4,
-               nb_cores=max(1,psutil.cpu_count()-1),folder='videos')
+  master_nwk = iterativeA3c(nb_ghosts=0,round_training=10,rounds=100,display_mode='graphics',num_parallel=4,
+               nb_cores=max(1,psutil.cpu_count()),folder='videos')
 #  max(1,psutil.cpu_count())
