@@ -66,7 +66,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                                   global_scope="global_"+str(i))
                                     for i in range(0,nb_ghosts+1)]
     global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False) for i in range(0,nb_ghosts+1)]
-    optims = [tf.train.AdamOptimizer(learning_rate=1e-4) for i in range(0,nb_ghosts+1)]
+    optims = [tf.train.AdamOptimizer(learning_rate=1e-7) for i in range(0,nb_ghosts+1)]
 
 
     with tf.Session() as sess:
@@ -118,7 +118,9 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
                 sys.stdout.write("\r           Final result       \n")
                 sys.stdout.flush()
+                main_agents[i].showLearn()
                 games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                main_agents[i].showLearn(False)
                 # Compute how many consecutive wins ghosts or pacman have
                 # consec_wins is negative if the ghosts have won, positive otherwise.
                 # abs(consec_wins) is the number of consecutive wins.
@@ -152,6 +154,6 @@ def makeGif(folder='videos',filename='movie.mp4'):
 
 
 if __name__ is "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=0,round_training=10,rounds=100,display_mode='graphics',num_parallel=4,
+  master_nwk = iterativeA3c(nb_ghosts=0,round_training=800,rounds=200,display_mode='graphics',num_parallel=4,
                nb_cores=max(1,psutil.cpu_count()),folder='videos')
 #  max(1,psutil.cpu_count())

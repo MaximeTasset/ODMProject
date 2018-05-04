@@ -23,7 +23,7 @@ import sys
 import tensorflow as tf
 import scipy.signal
 
-MAX_SIZE =  3
+MAX_SIZE =  30
 
 DIRECTION = [ Directions.NORTH,
               Directions.SOUTH,
@@ -34,7 +34,7 @@ DIRECTION = [ Directions.NORTH,
 
 
 def dF(val):
-    return 0.005
+    return 0.00
 
 class ReinfAgent(GhostAgent,Agent):
 
@@ -76,7 +76,7 @@ class ReinfAgent(GhostAgent,Agent):
         else:
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
         self.count = 0
-
+        self.show = False
 
     def diminueEpsilon(self):
         if self.min_epsilon != self.epsilon and self.count == 20:
@@ -104,7 +104,7 @@ class ReinfAgent(GhostAgent,Agent):
             legalActions = state.getLegalActions(self.index)
             s = getDataState(state)
             # If we learn and epsilon greedy, make random move
-            if self.round_training:
+            if self.round_training and not self.show:
                 if self.index:
                     dist = self.training_ghost.getDistribution(state)
                     dist.setdefault(0)
@@ -131,7 +131,7 @@ class ReinfAgent(GhostAgent,Agent):
                                     feed_dict={self.local_AC.inputs:[s],
                                     self.local_AC.state_in[0]:self.rnn_state[0],
                                     self.local_AC.state_in[1]:self.rnn_state[1]})
-
+                re = a_dist
                 #we remove the illegal move from the distribution
                 a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
                 a_dist = np.array(a_dist)
@@ -140,12 +140,16 @@ class ReinfAgent(GhostAgent,Agent):
                 if not self.index:
                   a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 2
 
+                prev = a_dist.copy()
                 a_dist = a_dist / sum(a_dist)
 
 #                with open(self.name+'.txt','a') as f:
 #                    f.write('{}:{}\n'.format([st.getPosition() for st in state.data.agentStates],a_dist))
 
+               # with open(self.name+'.txt','a') as f:
+              #      f.write("{}:{}:{}:{}\n".format(re,prev,a_dist,self.epsilon))
                 if np.random.uniform() <= self.epsilon:
+
                     move = np.random.choice(a_dist,p=a_dist)
                     move = DIRECTION[np.argmax(a_dist == move)]
                 else:
@@ -159,7 +163,10 @@ class ReinfAgent(GhostAgent,Agent):
             if self.learn:
                 self._saveOneStepTransistion(state,move,False,v[0,0])
 
-            return v
+            return move
+    def showLearn(self,show=True):
+        self.show = show
+
 
     def startLearning(self):
         self.learn = True
@@ -195,16 +202,17 @@ class ReinfAgent(GhostAgent,Agent):
                          10000 * state.isWin() + 10000 * state.isLose()
             else:
                 #pacman reward
-                reward = -10 + 100000 * state.isWin() \
+                reward = -1 + 100000 * state.isWin() \
                         -100000 * state.isLose() + abs(state.getNumFood() - self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
-                if self.name.endswith("0"):
-                    with open(self.name+'.txt','a') as f:
-                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
+#                if self.name.endswith("0"):
+#                    with open(self.name+'.txt','a') as f:
+#                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
         if len(self.one_step_transistions) == MAX_SIZE or final:
-            self.diminueEpsilon()
+            if not self.round_training:
+                self.diminueEpsilon()
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
@@ -330,7 +338,7 @@ def getDataState(state):
     agent_pos = [st.getPosition() for st in state.data.agentStates]
     food_pos = state.getFood()
     walls_pos = state.getWalls()
-    caps_pos = state.getCapsules()
+#    caps_pos = state.getCapsules()
 
     data = np.zeros((walls_pos.width,walls_pos.height))
     for i in range(walls_pos.width):
@@ -342,7 +350,7 @@ def getDataState(state):
                 data[i,j] = -10
             elif food_pos[i][j]:
                 data[i,j] = 2000
-            elif (i,j) in caps_pos:
-                data[i,j] = 3000
+#            elif (i,j) in caps_pos:
+#                data[i,j] = 3000
     return data.flatten()
 

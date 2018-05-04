@@ -51,10 +51,10 @@ class AC_Network():
                 kernel_size=tuple([4,4]),stride=tuple([1,1]),padding='VALID')
 
 
-            hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.elu)
-
-            for i in range(10):
-                hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.elu,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
+            hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.tanh)
+            #•tf.nn.elu
+            for i in range(20):
+                hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.tanh,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
             #Recurrent network for temporal dependencies
             lstm_cell = tf.contrib.rnn.BasicLSTMCell(100,state_is_tuple=True)
