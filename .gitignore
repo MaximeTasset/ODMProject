@@ -9,3 +9,5 @@ test
 *.txt
 *.txt
 save_scores.txt
+save_scores.txt
+*.zip

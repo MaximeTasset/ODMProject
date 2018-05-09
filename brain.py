@@ -38,20 +38,23 @@ def normalized_columns_initializer(std=1.0):
 class AC_Network():
     def __init__(self,s_size,a_size,grid_size,scope,trainer,global_scope='global'):
 #        print(s_size,a_size,scope,trainer,global_scope)
+        self.scope = scope
+        self.global_scope = global_scope
 
         with tf.variable_scope(scope):
+
             #Input and hidden layers
             self.inputs = tf.placeholder(shape=[None,s_size],dtype=tf.float32)
             self.imageIn = tf.reshape(self.inputs,shape=[-1,grid_size[0],grid_size[1],1])
-            self.conv1 = slim.conv2d(activation_fn=tf.nn.elu,
-                inputs=self.imageIn,num_outputs=64,
-                kernel_size=tuple([8,8]),stride=tuple([1,1]),padding='VALID')
-            self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
-                inputs=self.conv1,num_outputs=16,
-                kernel_size=tuple([4,4]),stride=tuple([1,1]),padding='VALID')
+            self.conv1 = slim.conv2d(activation_fn=tf.nn.tanh,
+                inputs=self.imageIn,num_outputs=81,
+                kernel_size=tuple([9,9]),stride=tuple([1,1]),padding='VALID')
+#            self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
+#                inputs=self.conv1,num_outputs=9,
+#                kernel_size=tuple([3,3]),stride=tuple([1,1]),padding='VALID')
 
 
-            hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.tanh)
+            hidden = slim.fully_connected(slim.flatten(self.conv1),100,activation_fn=tf.nn.tanh)
             #•tf.nn.elu
             for i in range(20):
                 hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.tanh,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))

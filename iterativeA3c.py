@@ -12,23 +12,24 @@ import tensorflow as tf
 from brain import *
 
 import sys
-from copy import deepcopy
 from multiprocessing.pool import ThreadPool
 #from multiprocessing import Pool
 import psutil
 import os
 import imageio as io
-from tensorflow.python.client import device_lib
+#from tensorflow.python.client import device_lib
+import gc
 
-    # Assume that you have 8GB of GPU memory and want to allocate ~6GB:
-GPU = False
-for d in device_lib.list_local_devices():
-    if d.device_type == 'GPU':
-        GPU = True
-        break
-if GPU:
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
-    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+
+#GPU = False
+#for d in device_lib.list_local_devices():
+#    if d.device_type == 'GPU':
+#        GPU = True
+#        break
+#if GPU:
+#    # Assume that you have 8GB of GPU memory and want to allocate ~6GB:
+#    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
+#    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
 def runGames(kargs):
     return pacman.runGames(**kargs)
@@ -66,7 +67,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                                   global_scope="global_"+str(i))
                                     for i in range(0,nb_ghosts+1)]
     global_episodes = [tf.Variable(0,dtype=tf.int32,name='global_episodes'+str(i),trainable=False) for i in range(0,nb_ghosts+1)]
-    optims = [tf.train.AdamOptimizer(learning_rate=1e-7) for i in range(0,nb_ghosts+1)]
+    optims = [tf.train.AdamOptimizer(learning_rate=1e-5) for i in range(0,nb_ghosts+1)]
 
 
     with tf.Session() as sess:
@@ -98,59 +99,85 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
             for i in range(nb_ghosts+1):
                 print("Pacman" if not i else "Ghost {}".format(i))
-                for agents in parallel_agents:
-                    agents[i].startLearning()
-                curr_round_training = rounds if i else max(rounds,rounds*nb_ghosts)
+
+                curr_round_training = rounds if i else max(rounds,2*rounds*nb_ghosts)
                 with open('save_scores.txt','a') as f:
                     f.write('agent '+str(i)+'\n')
 
-                for j in range(curr_round_training):
-                    sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
+                win = False
+                nb_try = 0
+                while not win:
+                    for agents in parallel_agents:
+                        agents[i].startLearning()
+
+                    for j in range(curr_round_training):
+                        sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
+                        sys.stdout.flush()
+
+                        score = sum([game[0].state.data.score for game in pool.map(runGames,args)
+                            if len(game)!=0])
+
+                        with open('save_scores.txt','a') as f:
+                            f.write(str(score)+'\n')
+                        gc.collect()
+                    for agents in parallel_agents:
+                        agents[i].stopLearning()
+
+
+                    sys.stdout.write("\r           Final result       \n")
                     sys.stdout.flush()
-
-                    score = sum([game[0].state.data.score for game in pool.map(runGames,args)
-                        if len(game)!=0])
-                    with open('save_scores.txt','a') as f:
-                        f.write(str(score)+'\n')
-
-                for agents in parallel_agents:
-                    agents[i].stopLearning()
-
-                sys.stdout.write("\r           Final result       \n")
-                sys.stdout.flush()
-                main_agents[i].showLearn()
-                games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
-                main_agents[i].showLearn(False)
-                # Compute how many consecutive wins ghosts or pacman have
-                # consec_wins is negative if the ghosts have won, positive otherwise.
-                # abs(consec_wins) is the number of consecutive wins.
-                for game in games:
-                    if game.state.isWin():
-                        consec_wins = max(1,consec_wins+1)
-                    else:
-                        consec_wins = min(-1,consec_wins-1)
-
-                makeGif(folder,'agent_{}_nbrounds_{}.mp4'.format(i,nb_it))
-                graphicsDisplay.FRAME_NUMBER = 0
+                    main_agents[i].showLearn()
+                    games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                    main_agents[i].showLearn(False)
+                    # Compute how many consecutive wins ghosts or pacman have
+                    # consec_wins is negative if the ghosts have won, positive otherwise.
+                    # abs(consec_wins) is the number of consecutive wins.
+                    for game in games:
+                        if game.state.isWin():
+                            if not i:
+                              win = True
+                            consec_wins = max(1,consec_wins+1)
+                        else:
+                            if i:
+                              win = True
+                            consec_wins = min(-1,consec_wins-1)
+                    if not win and not main_agents[i].round_training:
+                        for agents in parallel_agents:
+                            agents[i].round_training = curr_round_training
+                    elif main_agents[i].round_training:
+                        print("round_training {}".format(main_agents[i].round_training))
+                        win = False
+                    makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
+                    graphicsDisplay.FRAME_NUMBER = 0
+                    nb_try += 1
             nb_it += 1
 
 
     return master_networks
 
+def readAndDelete(imageName):
+    image = io.imread(imageName)
+    os.remove(imageName)
+    return image
 
 def makeGif(folder='videos',filename='movie.mp4'):
     filename = folder+'/'+filename
     # The images to use are in subfolder frames of the current folder:
     nb_frames = len(os.listdir(os.getcwd()+"/frames"))
+    pool = ThreadPool()
 
     os.makedirs('videos',exist_ok=True)
 
     with io.get_writer(filename, mode='I',macro_block_size=None) as writer:
-        for i in range(nb_frames):
-            filename = 'frames/frame_%08d.ps' % i
-            image = io.imread(filename)
+        filenames = ['frames/frame_%08d.ps' % i for i in range(nb_frames)]
+        images = pool.map(readAndDelete,filenames)
+        for image in images:
             writer.append_data(image)
-            os.remove(filename)
+#        for i in range(nb_frames):
+#            filename = 'frames/frame_%08d.ps' % i
+#            image = io.imread(filename)
+#            writer.append_data(image)
+#            os.remove(filename)
 
 
 if __name__ is "__main__":

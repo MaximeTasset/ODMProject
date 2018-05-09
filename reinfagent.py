@@ -22,6 +22,8 @@ from sklearn.base import clone
 import sys
 import tensorflow as tf
 import scipy.signal
+import gc
+from heapq import nsmallest
 
 MAX_SIZE =  30
 
@@ -39,7 +41,7 @@ def dF(val):
 class ReinfAgent(GhostAgent,Agent):
 
     def __init__(self,optim, global_episodes,sess,s_size,a_size,grid_size, index=0,
-                 name="worker",global_scope='global',round_training=5,gamma=0.95,
+                 name="worker",global_scope='global',round_training=5,gamma=0.999,
                  epsilon=1,min_epsilon=0.01):
 
         self.lastMove = 4
@@ -77,6 +79,7 @@ class ReinfAgent(GhostAgent,Agent):
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
         self.count = 0
         self.show = False
+#        self.nb_move = 0
 
     def diminueEpsilon(self):
         if self.min_epsilon != self.epsilon and self.count == 20:
@@ -117,10 +120,10 @@ class ReinfAgent(GhostAgent,Agent):
                     move = self.training_pacman.getAction(state)
 
 #            if self.learn and np.random.uniform() <= self.epsilon:
-                v = self.sess.run(self.local_AC.value,
-                                feed_dict={self.local_AC.inputs:[s],
-                                self.local_AC.state_in[0]:self.rnn_state[0],
-                                self.local_AC.state_in[1]:self.rnn_state[1]})
+                a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
+                                    feed_dict={self.local_AC.inputs:[s],
+                                    self.local_AC.state_in[0]:self.rnn_state[0],
+                                    self.local_AC.state_in[1]:self.rnn_state[1]})
 #                move = legalActions[np.random.randint(0,len(legalActions))]
 
 #                if Actions.directionToVector(move) == (0,0):
@@ -131,17 +134,14 @@ class ReinfAgent(GhostAgent,Agent):
                                     feed_dict={self.local_AC.inputs:[s],
                                     self.local_AC.state_in[0]:self.rnn_state[0],
                                     self.local_AC.state_in[1]:self.rnn_state[1]})
-                re = a_dist
+
+#                re = a_dist
                 #we remove the illegal move from the distribution
                 a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
                 a_dist = np.array(a_dist)
 
                 #we don't want to go in the opposite direction
-                if not self.index:
-                  a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 2
 
-                prev = a_dist.copy()
-                a_dist = a_dist / sum(a_dist)
 
 #                with open(self.name+'.txt','a') as f:
 #                    f.write('{}:{}\n'.format([st.getPosition() for st in state.data.agentStates],a_dist))
@@ -149,7 +149,10 @@ class ReinfAgent(GhostAgent,Agent):
                # with open(self.name+'.txt','a') as f:
               #      f.write("{}:{}:{}:{}\n".format(re,prev,a_dist,self.epsilon))
                 if np.random.uniform() <= self.epsilon:
-
+                    if not self.index:
+                        a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 4
+#                        prev = a_dist.copy()
+                        a_dist = a_dist / sum(a_dist)
                     move = np.random.choice(a_dist,p=a_dist)
                     move = DIRECTION[np.argmax(a_dist == move)]
                 else:
@@ -159,6 +162,11 @@ class ReinfAgent(GhostAgent,Agent):
                 if m == move:
                   self.lastMove = i
                   break
+#            if self.nb_move == 100:
+#                gc.collect()
+#                self.nb_move = 1
+#            else:
+#                self.nb_move += 1
 
             if self.learn:
                 self._saveOneStepTransistion(state,move,False,v[0,0])
@@ -183,14 +191,15 @@ class ReinfAgent(GhostAgent,Agent):
                                                          mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
 
     def final(self,final_state):
-      with self.sess.as_default(), self.sess.graph.as_default():
+#      with self.sess.as_default(), self.sess.graph.as_default():
           self._saveOneStepTransistion(final_state,None,True)
           self.lastMove = 4
+          gc.collect()
           if self.learn and self.round_training:
             self.round_training -= 1
 
     def _saveOneStepTransistion(self,state,move,final,v=None):
-        state_data = getDataState(state)
+        state_data = getDataState(state,self.index)
         if not self.prev is None:
 
 #            possibleMove = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
@@ -199,7 +208,7 @@ class ReinfAgent(GhostAgent,Agent):
                 #ghost reward
                 reward = -util.manhattanDistance(state.getGhostPosition(self.index),
                                               state.getPacmanPosition()) - \
-                         10000 * state.isWin() + 10000 * state.isLose()
+                         100000 * state.isWin() + 100000 * state.isLose()
             else:
                 #pacman reward
                 reward = -1 + 100000 * state.isWin() \
@@ -329,7 +338,7 @@ def convertGridToNpArray(grid):
     return array
 
 
-def getDataState(state):
+def getDataState(state,index=0):
     """
     " Returns a tuple whose first elements are the positions of all the agents,
     " and whose other elements contain the flattened food grid.
@@ -338,19 +347,25 @@ def getDataState(state):
     agent_pos = [st.getPosition() for st in state.data.agentStates]
     food_pos = state.getFood()
     walls_pos = state.getWalls()
-#    caps_pos = state.getCapsules()
+    caps_pos = state.getCapsules()
 
     data = np.zeros((walls_pos.width,walls_pos.height))
+    foods = []
     for i in range(walls_pos.width):
         for j in range(walls_pos.height):
             if (i,j) in agent_pos:
                 index_agent = agent_pos.index((i,j))
-                data[i,j] = 10000 if not index_agent  else -index_agent*100
+                data[i,j] = 10000 if not index_agent  else -index_agent*1000
             elif walls_pos[i][j]:
                 data[i,j] = -10
-            elif food_pos[i][j]:
-                data[i,j] = 2000
-#            elif (i,j) in caps_pos:
-#                data[i,j] = 3000
+            elif food_pos[i][j] and not index:
+                foods.append((i,j))
+#                data[i,j] = 2000
+            elif (i,j) in caps_pos and not index:
+                foods.append((i,j))
+#                data[i,j] = 2000
+
+    for i,j in nsmallest(5,foods,key=lambda pt: util.manhattanDistance(agent_pos[0],pt)):
+        data[i,j] = 2000
     return data.flatten()
 
