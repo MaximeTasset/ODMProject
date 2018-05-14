@@ -23,7 +23,9 @@ import sys
 import tensorflow as tf
 import scipy.signal
 import gc
-from heapq import nsmallest
+from heapq import nlargest
+
+from queue import PriorityQueue
 
 MAX_SIZE =  30
 
@@ -279,53 +281,6 @@ class ReinfAgent(GhostAgent,Agent):
 
 
 
-def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=-1),gamma=.95):
-    """
-    " samples = [(state0,action0,reward0,state1,possibleMoveFromState1),...,(stateN,actionN,rewardN,stateN+1,possibleMoveFromStateN+1)]
-    " convergenceTestSet, None = no test set => return None
-    "
-    " Return: an trained instance of mlAlgo
-    "
-    " Note: this function assumes that an option like 'warm_start' is set to False or that a call to the fit function reset the model.
-
-    """
-    QnLSX = np.array([(s + a) for (s,a,_,_,_) in samples])
-    QnLSY = np.array([r for (_,_,r,_,_) in samples])
-
-
-    QN_it = clone(mlAlgo)
-
-    # N=1
-    QN_it.fit(QnLSX,QnLSY)
-
-
-    # Creation of the array that will be used for predictions
-    i = 0
-    topredict = []
-    index = {}
-    for (s0,a0,r,s1,actionSpace) in samples:
-      index[s0,a0] = []
-      for a in actionSpace:
-        topredict.append((s1+a))
-        index[s0,a0].append(i)
-        i +=1
-
-    topredict = np.array(topredict)
-
-    for n in range(0,N-1):
-      sys.stdout.write("\r{}/{}  ".format(n+2,N))
-      sys.stdout.flush()
-
-      # One big call is much faster than multiple small ones.
-      Qn_1 = QN_it.predict(topredict)
-      # The recursion is used only when not in a terminal state
-      QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if abs(r) < 1000 else r) for (s0,a0,r,s1,_) in samples])
-
-
-      QN_it.fit(QnLSX,QnLSY)
-
-    return QN_it
-
 # Discounting function used to calculate discounted returns.
 def discount(x, gamma):
     return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
@@ -338,7 +293,31 @@ def convertGridToNpArray(grid):
     return array
 
 
-def getDataState(state,index=0):
+def distanceMap(grid,coord,maxPos=5):
+  coord = tuple(coord)
+  neighbors = [(0,1),(0,-1),(1,0),(-1,0)]
+  distance_map = np.zeros_like(grid)
+  distance_map.fill(sum(distance_map.shape))
+
+  pq = PriorityQueue()
+  pq.put((0,coord))
+  while not pq.empty() and maxPos:
+    dist,curr = pq.get()
+    if distance_map[curr] > dist:
+      distance_map[curr] = dist
+      for x,y in neighbors:
+        neighbor =  curr[0] + x, curr[1] + y
+
+        if 0 <= neighbor[0] < grid.shape[0]:
+          if 0 <= neighbor[1] < grid.shape[1]:
+            if grid[tuple(neighbor)] >= 0:
+              pq.put((dist+1,tuple(neighbor)))
+              if grid[tuple(neighbor)]:
+                maxPos -= 1
+
+  return distance_map
+
+def getDataState(state,index=0,maxPos=5):
     """
     " Returns a tuple whose first elements are the positions of all the agents,
     " and whose other elements contain the flattened food grid.
@@ -360,12 +339,14 @@ def getDataState(state,index=0):
                 data[i,j] = -10
             elif food_pos[i][j] and not index:
                 foods.append((i,j))
-#                data[i,j] = 2000
+                data[i,j] = 2000
             elif (i,j) in caps_pos and not index:
                 foods.append((i,j))
-#                data[i,j] = 2000
+                data[i,j] = 2000
 
-    for i,j in nsmallest(5,foods,key=lambda pt: util.manhattanDistance(agent_pos[0],pt)):
-        data[i,j] = 2000
+    if not index:
+      dM = distanceMap(data,agent_pos[0],maxPos)
+      for i,j in nlargest(len(foods)-maxPos,foods,key=lambda pt: dM[tuple(pt)]):
+          data[i,j] = 0
     return data.flatten()
 

@@ -833,7 +833,7 @@ def runGames(
         record,
         numTraining=0,
         catchExceptions=False,
-        timeout=30):
+        timeout=30,fname=None):
     import __main__
     __main__.__dict__['_display'] = display
 
@@ -862,13 +862,14 @@ def runGames(
         games.append(game)
 
         if record:
-            import time
+
             import pickle
-            fname = ('recorded-game-%d' % (i + 1)) + \
-                '-'.join([str(t) for t in time.localtime()[1:6]])
-            f = file(fname, 'w')
+            if fname is None:
+              fname = ('recorded-game-%d' % (i + 1)) + \
+                  '-'.join([str(t) for t in time.localtime()[1:6]])
+            f = open(fname, 'wb')
             components = {'layout': layout, 'actions': game.moveHistory}
-            pickle.dump(components, f)
+            pickle.dump(components, f,pickle.HIGHEST_PROTOCOL)
             f.close()
 
     if (numGames - numTraining) > 0:

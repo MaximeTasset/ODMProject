@@ -124,10 +124,15 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         agents[i].stopLearning()
 
 
-                    sys.stdout.write("\r           Final result       \n")
+                    sys.stdout.write("           Final result       \n")
                     sys.stdout.flush()
                     main_agents[i].showLearn()
-                    games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                    if display_mode != 'quiet' and display_mode != 'text':
+                      games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                    else:
+                      os.makedirs('videos',exist_ok=True)
+                      games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
+                                              fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
                     main_agents[i].showLearn(False)
                     # Compute how many consecutive wins ghosts or pacman have
                     # consec_wins is negative if the ghosts have won, positive otherwise.
@@ -143,12 +148,14 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                             consec_wins = min(-1,consec_wins-1)
                     if not win and not main_agents[i].round_training:
                         for agents in parallel_agents:
-                            agents[i].round_training = curr_round_training
+                            agents[i].round_training = curr_round_training/2
                     elif main_agents[i].round_training:
                         print("round_training {}".format(main_agents[i].round_training))
                         win = False
-                    makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
-                    graphicsDisplay.FRAME_NUMBER = 0
+
+                    if display_mode != 'quiet' and display_mode != 'text':
+                        makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
+                        graphicsDisplay.FRAME_NUMBER = 0
                     nb_try += 1
             nb_it += 1
 
@@ -166,7 +173,7 @@ def makeGif(folder='videos',filename='movie.mp4'):
     nb_frames = len(os.listdir(os.getcwd()+"/frames"))
     pool = ThreadPool()
 
-    os.makedirs('videos',exist_ok=True)
+    os.makedirs(folder,exist_ok=True)
 
     with io.get_writer(filename, mode='I',macro_block_size=None) as writer:
         filenames = ['frames/frame_%08d.ps' % i for i in range(nb_frames)]
@@ -180,7 +187,7 @@ def makeGif(folder='videos',filename='movie.mp4'):
 #            os.remove(filename)
 
 
-if __name__ is "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=0,round_training=800,rounds=200,display_mode='graphics',num_parallel=4,
-               nb_cores=max(1,psutil.cpu_count()),folder='videos')
+if __name__ == "__main__":
+  master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=1,display_mode='quiet',num_parallel=8,
+               nb_cores=8,folder='videos')
 #  max(1,psutil.cpu_count())
