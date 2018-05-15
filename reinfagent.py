@@ -42,14 +42,20 @@ def dF(val):
 class ReinfAgentFQI(GhostAgent,Agent):
     def __init__(self,global_one_step,index=0,round_training=5):
         self.one_step_transistions = global_one_step
-        self.prev = 4
+        self.prev = None
+        self.lastMove = 4
         self.index = index
         self.round_training = round_training
         self.learning_algo = None
+        self.show = False
+        self.learn = False
         if index:
             self.training_ghost = Greedyghost(index)
         else:
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
+
+    def showLearn(self,show=True):
+        self.show = show
 
     def startLearning(self):
         self.learn = True
@@ -83,28 +89,33 @@ class ReinfAgentFQI(GhostAgent,Agent):
                 move = self.training_pacman.getAction(state)
         else:
             legalActions = list(map(DIRECTION.index,state.getLegalActions(self.index)))
-            state_data = getDataState(state,self.index)
-            a_dist = self.learning_algo.predict(np.array([state_data+[action] for action in legalActions]))
-            a_dist /= sum(a_dist)
+            state_data = tuple(getDataState(state,self.index).tolist())
+            if np.random.uniform() > 0.1:
+                a_dist = self.learning_algo.predict(np.array([state_data+(action,) for action in legalActions]))
+                move = DIRECTION[legalActions[np.argmax(a_dist)]]
+            else:
+                move = np.random.randint(len(legalActions))
+                move = DIRECTION[legalActions[move]]
 
-            if not self.index:
-                a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 4
-                a_dist = a_dist / sum(a_dist)
-            move = np.random.choice(a_dist,p=a_dist)
-            move = legalActions[np.argmax(a_dist == move)]
+#            if not self.index:
+#                a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 4
+#                a_dist = a_dist / sum(a_dist)
+
+
 
 
 #        legalActions = state.getLegalActions(self.index)
 #        s = getDataState(state)
         if self.learn:
             self._saveOneStepTransistion(state,move,False)
-
+        return move
 
     def final(self,state):
-        self._saveOneStepTransistion(self,state,None,True)
+        self._saveOneStepTransistion(state,None,True)
+        self.lastMove = 4
 
     def _saveOneStepTransistion(self,state,move,final):
-        state_data = getDataState(state,self.index)
+        state_data = tuple(getDataState(state,self.index).tolist())
         if not self.prev is None:
 
             if self.index:
@@ -123,8 +134,8 @@ class ReinfAgentFQI(GhostAgent,Agent):
         if not final:
           move = DIRECTION.index(move)
           self.lastMove = move
-          possibleMoves = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
-          self.prev = (state.deepCopy(),move,state_data,)
+          possibleMoves = list(map(lambda x:(DIRECTION.index(x),),state.getLegalActions(self.index)))
+          self.prev = (state.deepCopy(),(move,),state_data,possibleMoves)
         else:
           self.prev = None
 
@@ -400,7 +411,7 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
     topredict = np.array(topredict)
 
     for n in range(0,N-1):
-      sys.stdout.write("\r{}/{}  ".format(n+2,N))
+      sys.stdout.write("\r \t{}/{}  ".format(n+2,N))
       sys.stdout.flush()
 
       # One big call is much faster than multiple small ones.
@@ -408,10 +419,10 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
       # The recursion is used only when not in a terminal state
       QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if abs(r) < 1000 else r) for (s0,a0,r,s1,_) in samples])
 
+      if n != N-2:
+          QN_it.fit(QnLSX,QnLSY)
 
-      QN_it.fit(QnLSX,QnLSY)
-
-    return QN_it
+    return QnLSX,QnLSY #QN_it
 
 # Discounting function used to calculate discounted returns.
 def discount(x, gamma):

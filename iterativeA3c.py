@@ -20,7 +20,8 @@ import imageio as io
 #from tensorflow.python.client import device_lib
 import gc
 
-from sklearn.base import clone
+#from sklearn.base import clone
+from copy import deepcopy
 from sklearn.ensemble import ExtraTreesRegressor
 from queue import Queue
 #GPU = False
@@ -102,7 +103,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
             for i in range(nb_ghosts+1):
                 print("Pacman" if not i else "Ghost {}".format(i))
 
-                curr_round_training = rounds if i else max(rounds,2*rounds*nb_ghosts)
+                curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
                 with open('save_scores.txt','a') as f:
                     f.write('agent '+str(i)+'\n')
 
@@ -112,8 +113,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     for agents in parallel_agents:
                         agents[i].startLearning()
 
-                    for j in range(curr_round_training):
-                        sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
+                    for j in range(curr_round):
+                        sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
                         sys.stdout.flush()
 
                         score = sum([game[0].state.data.score for game in pool.map(runGames,args)
@@ -150,7 +151,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                             consec_wins = min(-1,consec_wins-1)
                     if not win and not main_agents[i].round_training:
                         for agents in parallel_agents:
-                            agents[i].round_training = curr_round_training/2
+                            agents[i].round_training = curr_round/2
                     elif main_agents[i].round_training:
                         print("round_training {}".format(main_agents[i].round_training))
                         win = False
@@ -167,7 +168,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
 
-    tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
 #    pool = Pool(num_parallel)
 
@@ -189,13 +189,14 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
 
     # Generate global network
-    master_networks = [ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores) for i in range(0,nb_ghosts+1)]
+    master_networks = [ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores,warm_start=True) for i in range(0,nb_ghosts+1)]
     global_episodes = [Queue() for i in range(0,nb_ghosts+1)]
 
+    factor_pacman = 2
 
     parallel_agents = [[ReinfAgentFQI(global_episodes[i],
-                                   sindex=i,
-                                   round_training=round_training if i else max(round_training,round_training*nb_ghosts))
+                                   index=i,
+                                   round_training=round_training if i else max(round_training,factor_pacman*round_training*nb_ghosts))
                                     for i in range(0,nb_ghosts+1)]
                                     for j in range(num_parallel)]
 
@@ -218,38 +219,44 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
         for i in range(nb_ghosts+1):
             print("Pacman" if not i else "Ghost {}".format(i))
 
-            curr_round_training = rounds if i else max(rounds,2*rounds*nb_ghosts)
+            curr_round = rounds if i else max(rounds,factor_pacman*rounds*nb_ghosts)
             with open('save_scores.txt','a') as f:
                 f.write('agent '+str(i)+'\n')
 
             win = False
             nb_try = 0
             while not win:
+
                 for agents in parallel_agents:
                     agents[i].startLearning()
-                for j in range(curr_round_training):
-                    sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
+
+                for j in range(curr_round):
+                    sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
                     sys.stdout.flush()
 
-                    score = sum([game[0].state.data.score for game in pool.map(runGames,args)
-                        if len(game)!=0])
+                    scores = [game[0].state.data.score for game in pool.map(runGames,args)]
+                                    #if len(game)!=0])
 
                     with open('save_scores.txt','a') as f:
-                        f.write(str(score)+'\n')
+                        f.write(str(scores)+ '\t mean: '+ str(sum(scores)/num_parallel)+'\n')
                     gc.collect()
+
                 for agents in parallel_agents:
                     agents[i].stopLearning()
 
-                sys.stdout.write("FQI")
+                sys.stdout.write("\nFQI \n")
                 sys.stdout.flush()
 
                 one_step_transistions = []
                 while not global_episodes[i].empty():
                     one_step_transistions.append(global_episodes[i].get())
-                master_networks[i] = computeFittedQIteration(one_step_transistions,N=60,
+
+                x,y = computeFittedQIteration(one_step_transistions,N=60,
                                                    mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
+                master_networks[i].fit(x,y)
+                print(len(master_networks[i].estimators_))
                 for agents in parallel_agents:
-                    agents[i].learning_algo = clone(master_networks[i])
+                    agents[i].learning_algo = deepcopy(master_networks[i])
 
                 sys.stdout.write("           Final result       \n")
                 sys.stdout.flush()
@@ -257,7 +264,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                 if display_mode != 'quiet' and display_mode != 'text':
                   games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
                 else:
-                  os.makedirs('videos',exist_ok=True)
+                  os.makedirs(folder,exist_ok=True)
                   games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
                                           fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
                 main_agents[i].showLearn(False)
@@ -275,7 +282,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                         consec_wins = min(-1,consec_wins-1)
                 if not win and not main_agents[i].round_training:
                     for agents in parallel_agents:
-                        agents[i].round_training = curr_round_training/2
+                        agents[i].round_training = curr_round/2
                 elif main_agents[i].round_training:
                     print("round_training {}".format(main_agents[i].round_training))
                     win = False
@@ -316,7 +323,7 @@ def makeGif(folder='videos',filename='movie.mp4'):
 
 
 if __name__ == "__main__":
-  master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=1,display_mode='quiet',num_parallel=8,
+  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=100,display_mode='graphics',num_parallel=8,
                nb_cores=8,folder='videos')
 
 
