@@ -5,7 +5,7 @@ Created on Fri Apr  6 17:38:41 2018
 @author: Sarah and Maxime
 """
 import pacman
-from reinfagent import ReinfAgent,getDataState
+from reinfagent import ReinfAgent,ReinfAgentFQI,getDataState,computeFittedQIteration
 import layout
 
 import tensorflow as tf
@@ -20,6 +20,7 @@ import imageio as io
 #from tensorflow.python.client import device_lib
 import gc
 
+from sklearn.base import clone
 from sklearn.ensemble import ExtraTreesRegressor
 from queue import Queue
 #GPU = False
@@ -239,7 +240,16 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                 for agents in parallel_agents:
                     agents[i].stopLearning()
 
+                sys.stdout.write("FQI")
+                sys.stdout.flush()
 
+                one_step_transistions = []
+                while not global_episodes[i].empty():
+                    one_step_transistions.append(global_episodes[i].get())
+                learning = computeFittedQIteration(one_step_transistions,N=60,
+                                                   mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
+                for agents in parallel_agents:
+                    agents[i].learning_algo = clone(learning)
                 sys.stdout.write("           Final result       \n")
                 sys.stdout.flush()
                 main_agents[i].showLearn()
