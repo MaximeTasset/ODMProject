@@ -246,10 +246,11 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                 one_step_transistions = []
                 while not global_episodes[i].empty():
                     one_step_transistions.append(global_episodes[i].get())
-                learning = computeFittedQIteration(one_step_transistions,N=60,
+                master_networks[i] = computeFittedQIteration(one_step_transistions,N=60,
                                                    mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
                 for agents in parallel_agents:
-                    agents[i].learning_algo = clone(learning)
+                    agents[i].learning_algo = clone(master_networks[i])
+
                 sys.stdout.write("           Final result       \n")
                 sys.stdout.flush()
                 main_agents[i].showLearn()
@@ -317,4 +318,7 @@ def makeGif(folder='videos',filename='movie.mp4'):
 if __name__ == "__main__":
   master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=1,display_mode='quiet',num_parallel=8,
                nb_cores=8,folder='videos')
+
+
+
 #  max(1,psutil.cpu_count())
