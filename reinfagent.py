@@ -51,6 +51,12 @@ class ReinfAgentFQI(GhostAgent,Agent):
         else:
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
 
+    def startLearning(self):
+        self.learn = True
+
+    def stopLearning(self):
+        self.learn = False
+
     def getDistribution(self, state):
         # Ghost function
 

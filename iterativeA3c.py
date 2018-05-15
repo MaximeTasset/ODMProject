@@ -226,7 +226,6 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
             while not win:
                 for agents in parallel_agents:
                     agents[i].startLearning()
-
                 for j in range(curr_round_training):
                     sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round_training))
                     sys.stdout.flush()
