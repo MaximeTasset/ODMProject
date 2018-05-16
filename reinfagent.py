@@ -40,8 +40,8 @@ def dF(val):
     return 0.00
 
 class ReinfAgentFQI(GhostAgent,Agent):
-    def __init__(self,global_one_step,index=0,round_training=5):
-        self.one_step_transistions = global_one_step
+    def __init__(self,index=0,round_training=5):
+        self.one_step_transistions = []
         self.prev = None
         self.lastMove = 4
         self.index = index
@@ -53,6 +53,12 @@ class ReinfAgentFQI(GhostAgent,Agent):
             self.training_ghost = Greedyghost(index)
         else:
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
+
+    def get_History(self,reset=True):
+        history = self.one_step_transistions
+        if reset:
+          self.one_step_transistions = []
+        return history
 
     def showLearn(self,show=True):
         self.show = show
@@ -129,7 +135,7 @@ class ReinfAgentFQI(GhostAgent,Agent):
                         -100000 * state.isLose() + abs(state.getNumFood() - self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
-            self.one_step_transistions.put((state_data,self.prev[1],reward,self.prev[2],self.prev[3]))
+            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],self.prev[3]))
 
         if not final:
           move = DIRECTION.index(move)

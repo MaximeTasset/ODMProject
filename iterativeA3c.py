@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 Created on Fri Apr  6 17:38:41 2018
@@ -13,7 +14,7 @@ from brain import AC_Network
 
 import sys
 from multiprocessing.pool import ThreadPool
-#from multiprocessing import Pool
+from multiprocessing import Pool
 import psutil
 import os
 import imageio as io
@@ -133,7 +134,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     if display_mode != 'quiet' and display_mode != 'text':
                       games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
                     else:
-                      os.makedirs('videos',exist_ok=True)
+                      os.makedirs(folder,exist_ok=True)
                       games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
                                               fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
                     main_agents[i].showLearn(False)
@@ -168,7 +169,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
 
-    pool = ThreadPool(nb_cores)
+    pool = Pool(nb_cores)
 #    pool = Pool(num_parallel)
 
     # Choose a display format
@@ -190,13 +191,11 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
     # Generate global network
     master_networks = [ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores,warm_start=True) for i in range(0,nb_ghosts+1)]
-    global_episodes = [Queue() for i in range(0,nb_ghosts+1)]
 
     factor_pacman = 2
 
-    parallel_agents = [[ReinfAgentFQI(global_episodes[i],
-                                   index=i,
-                                   round_training=round_training if i else max(round_training,factor_pacman*round_training*nb_ghosts))
+    parallel_agents = [[ReinfAgentFQI(index=i,
+                                      round_training=round_training if i else max(round_training,factor_pacman*round_training*nb_ghosts))
                                     for i in range(0,nb_ghosts+1)]
                                     for j in range(num_parallel)]
 
@@ -213,6 +212,15 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
     nb_it = 0
     consec_wins = 0
+
+#    sys.stdout.write("test\n")
+#    sys.stdout.flush()
+#    for key in args[0]:
+#        sys.stdout.write("{}\n".format(args[0][key]))
+#        pool.map(test,[arg[key] for arg in args])
+#    sys.stdout.write("fin test\n")
+#    sys.stdout.flush()
+#    sys.exit()
 
     while nb_it<100 or abs(consec_wins)<50:
 
@@ -241,15 +249,17 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                         f.write(str(scores)+ '\t mean: '+ str(sum(scores)/num_parallel)+'\n')
                     gc.collect()
 
+                one_step_transistions = []
                 for agents in parallel_agents:
                     agents[i].stopLearning()
+                    one_step_transistions.extend(agents[i].get_History(True))
 
                 sys.stdout.write("\nFQI \n")
                 sys.stdout.flush()
 
-                one_step_transistions = []
-                while not global_episodes[i].empty():
-                    one_step_transistions.append(global_episodes[i].get())
+#                one_step_transistions = []
+#                while not global_episodes[i].empty():
+#                    one_step_transistions.append(global_episodes[i].get())
 
                 x,y = computeFittedQIteration(one_step_transistions,N=60,
                                                    mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
@@ -321,10 +331,20 @@ def makeGif(folder='videos',filename='movie.mp4'):
 #            writer.append_data(image)
 #            os.remove(filename)
 
+def test(p):
+  sys.stdout.write('prout{}\n'.format(p))
+  sys.stdout.flush()
 
 if __name__ == "__main__":
-  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=100,display_mode='graphics',num_parallel=8,
-               nb_cores=8,folder='videos')
+  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
+               nb_cores=12,folder='FQI')
+#  master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=6,
+#               nb_cores=12,folder='A3C')
+
+#  pool = Pool(4)
+#  pool.map(test,list(range(20)))
+#  sys.stdout.write("fin")
+#  sys.stdout.flush()
 
 
 
