@@ -55,9 +55,12 @@ class ReinfAgentFQI(GhostAgent,Agent):
             self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
 
     def get_History(self,reset=True):
-        history = self.one_step_transistions
+
         if reset:
+          history = self.one_step_transistions
           self.one_step_transistions = []
+        else:
+          history = self.one_step_transistions.copy()
         return history
 
     def showLearn(self,show=True):
@@ -400,6 +403,8 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
     QN_it = clone(mlAlgo)
 
     # N=1
+    sys.stdout.write("\r \t{}/{}  ".format(n+2,N))
+    sys.stdout.flush()
     QN_it.fit(QnLSX,QnLSY)
 
 

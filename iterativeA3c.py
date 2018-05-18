@@ -14,7 +14,7 @@ from brain import AC_Network
 
 import sys
 from multiprocessing.pool import ThreadPool
-from multiprocessing import Pool
+from multiprocessing import Pool,Process,Queue
 import psutil
 import os
 import imageio as io
@@ -24,7 +24,6 @@ import gc
 #from sklearn.base import clone
 from copy import deepcopy
 from sklearn.ensemble import ExtraTreesRegressor
-from queue import Queue
 #GPU = False
 #for d in device_lib.list_local_devices():
 #    if d.device_type == 'GPU':
@@ -37,6 +36,12 @@ from queue import Queue
 
 def runGames(kargs):
     return pacman.runGames(**kargs)
+#def runGames2(kargs,queue):
+#    queue.put(pacman.runGames(**kargs))
+#
+#def testfunc(q):
+#  print(q)
+#  return
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
@@ -95,9 +100,9 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                  "record":False,
                  "numTraining":1,
                  "timeout":30} for i in range(num_parallel)]
-
         nb_it = 0
         consec_wins = 0
+#        queue = Queue()
 
         while nb_it<100 or abs(consec_wins)<50:
 
@@ -118,6 +123,21 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
                         sys.stdout.flush()
 
+
+#                        results = []
+#                        pr = []
+#                        for arg in args:
+#                          p = Process(target=runGames2, args=(arg,queue))
+#                          p.start()
+#                          pr.append(p)
+#                          if len(pr) == nb_cores:
+#                            pr[0].join()
+#                            pr = pr[1:]
+#
+#                        while not queue.empty():
+#                          results.append(queue.get())
+#
+#                        score = sum([game[0].state.data.score for game in results if len(game)!=0])
                         score = sum([game[0].state.data.score for game in pool.map(runGames,args)
                             if len(game)!=0])
 
@@ -157,6 +177,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         print("round_training {}".format(main_agents[i].round_training))
                         win = False
 
+
+
                     if display_mode != 'quiet' and display_mode != 'text':
                         makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
                         graphicsDisplay.FRAME_NUMBER = 0
@@ -165,6 +187,10 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
 
     return master_networks
+
+def runGamesFQI(kargs):
+    games = pacman.runGames(**kargs)
+    return (games,kargs)
 
 def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
@@ -199,16 +225,9 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                                     for i in range(0,nb_ghosts+1)]
                                     for j in range(num_parallel)]
 
-    main_agents = parallel_agents[0]
+#    main_agents = parallel_agents[0]
 
-    args = [{"layout":layout_instance,
-             "pacman":parallel_agents[i][0],
-             "ghosts":parallel_agents[i][1:],
-             "display":display,
-             "numGames":1,
-             "record":False,
-             "numTraining":1,
-             "timeout":30} for i in range(num_parallel)]
+
 
     nb_it = 0
     consec_wins = 0
@@ -242,8 +261,20 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                     sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
                     sys.stdout.flush()
 
-                    scores = [game[0].state.data.score for game in pool.map(runGames,args)]
-                                    #if len(game)!=0])
+                    args = [{"layout":layout_instance,
+                             "pacman":parallel_agents[a][0],
+                             "ghosts":parallel_agents[a][1:],
+                             "display":display,
+                             "numGames":1,
+                             "record":False,
+                             "numTraining":1,
+                             "timeout":30} for a in range(num_parallel)]
+
+                    results = pool.map(runGamesFQI,args)
+                    scores = []
+                    for a in range(len(parallel_agents)):
+                        scores.append(results[a][0][0].state.data.score)
+                        parallel_agents[a] = [results[a][1]["pacman"]]+results[a][1]["ghosts"]
 
                     with open('save_scores.txt','a') as f:
                         f.write(str(scores)+ '\t mean: '+ str(sum(scores)/num_parallel)+'\n')
@@ -251,8 +282,9 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
                 one_step_transistions = []
                 for agents in parallel_agents:
+                    one_step_transistions.extend(agents[i].get_History())
                     agents[i].stopLearning()
-                    one_step_transistions.extend(agents[i].get_History(True))
+
 
                 sys.stdout.write("\nFQI \n")
                 sys.stdout.flush()
@@ -263,6 +295,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
                 x,y = computeFittedQIteration(one_step_transistions,N=60,
                                                    mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
+
                 master_networks[i].fit(x,y)
                 print(len(master_networks[i].estimators_))
                 for agents in parallel_agents:
@@ -270,14 +303,14 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
                 sys.stdout.write("           Final result       \n")
                 sys.stdout.flush()
-                main_agents[i].showLearn()
+                parallel_agents[0][i].showLearn()
                 if display_mode != 'quiet' and display_mode != 'text':
-                  games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                  games = pacman.runGames(layout_instance,parallel_agents[0][0],parallel_agents[0][1:],display,1,False,timeout=30)
                 else:
                   os.makedirs(folder,exist_ok=True)
-                  games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
+                  games = pacman.runGames(layout_instance,parallel_agents[0][0],parallel_agents[0][1:],display,1,True,timeout=30,
                                           fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
-                main_agents[i].showLearn(False)
+                parallel_agents[0][i].showLearn(False)
                 # Compute how many consecutive wins ghosts or pacman have
                 # consec_wins is negative if the ghosts have won, positive otherwise.
                 # abs(consec_wins) is the number of consecutive wins.
@@ -290,11 +323,11 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                         if i:
                           win = True
                         consec_wins = min(-1,consec_wins-1)
-                if not win and not main_agents[i].round_training:
+                if not win and not parallel_agents[0][i].round_training:
                     for agents in parallel_agents:
                         agents[i].round_training = curr_round/2
-                elif main_agents[i].round_training:
-                    print("round_training {}".format(main_agents[i].round_training))
+                elif parallel_agents[0][i].round_training:
+                    print("round_training {}".format(parallel_agents[0][i].round_training))
                     win = False
 
                 if display_mode != 'quiet' and display_mode != 'text':
@@ -332,18 +365,25 @@ def makeGif(folder='videos',filename='movie.mp4'):
 #            os.remove(filename)
 
 def test(p):
-  sys.stdout.write('prout{}\n'.format(p))
-  sys.stdout.flush()
+  p.append("a")
+
 
 if __name__ == "__main__":
-  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
-               nb_cores=12,folder='FQI')
+  l = []
+  p = Process(target=test,args=(l,))
+  p.start()
+  p.join()
+  print(l)
+
+#  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
+#               nb_cores=12,folder='FQI')
 #  master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=6,
 #               nb_cores=12,folder='A3C')
 
 #  pool = Pool(4)
-#  pool.map(test,list(range(20)))
-#  sys.stdout.write("fin")
+#  b = [[a] for a in range(20)]
+#  pool.map(test,b)
+#  sys.stdout.write("fin {}".format(b))
 #  sys.stdout.flush()
 
 

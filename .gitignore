@@ -12,3 +12,5 @@ save_scores.txt
 save_scores.txt
 *.zip
 *.pickle
+*.view
+*.out
