@@ -194,6 +194,7 @@ class Agent(GhostAgent,Agent):
       self.memory = []	# used for n_step return
       self.R = 0.
       self.frames = 0
+      self.learn = False
 
       self.prev = None
 
@@ -483,5 +484,5 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
 
 if __name__ == "__main__":
-    mn = iterativeA3c(nb_ghosts=0,display_mode='graphics',
-                 round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='videos',layer='mediumClassic')
+    mn = iterativeA3c(nb_ghosts=1,display_mode='quiet',
+                 round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='A3Cv2',layer='mediumClassic')
