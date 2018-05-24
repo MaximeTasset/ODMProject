@@ -1,0 +1,487 @@
+# OpenGym CartPole-v0 with A3C on GPU
+# -----------------------------------
+#
+# A3C implementation with GPU optimizer threads.
+#
+# Made as part of blog series Let's make an A3C, available at
+# https://jaromiru.com/2017/02/16/lets-make-an-a3c-theory/
+#
+# author: Jaromir Janisch, 2017
+
+import numpy as np
+import tensorflow as tf
+
+import time, random, threading,sys,os
+import util
+from pacman import Directions
+from keras.models import *
+from keras.layers import *
+from keras import backend as K
+
+from multiprocessing.pool import ThreadPool
+import pacman
+import layout
+from game import Agent
+from ghostAgents import GhostAgent
+from reinfagent import getDataState
+from iterativeA3c import makeGif
+
+#-- constants
+ENV = 'CartPole-v0'
+
+RUN_TIME = 30
+THREADS = 8
+OPTIMIZERS = 3
+THREAD_DELAY = 0.001
+
+GAMMA = 0.99
+
+N_STEP_RETURN = 8
+GAMMA_N = GAMMA ** N_STEP_RETURN
+
+EPS_START = 0.4
+EPS_STOP  = .15
+EPS_STEPS = 75000
+
+MIN_BATCH = 32
+LEARNING_RATE = 1e-6
+
+LOSS_V = .5			# v loss coefficient
+LOSS_ENTROPY = .01 	# entropy coefficient
+
+NUM_STATE = None
+NUM_ACTIONS = None
+NONE_STATE = None
+
+MAX_SIZE =  30
+
+DIRECTION = [ Directions.NORTH,
+              Directions.SOUTH,
+              Directions.EAST,
+              Directions.WEST,
+              Directions.STOP]
+
+#---------
+class Brain:
+   train_queue = [ [], [], [], [], [] ]	# s, a, r, s', s' terminal mask
+   lock_queue = threading.Lock()
+
+   def __init__(self,session,index):
+      self.session = session
+      K.set_session(self.session)
+      K.manual_variable_initialization(True)
+
+      self.index = index
+
+      self.model = self._build_model()
+      self.graph = self._build_graph(self.model)
+
+
+      self.default_graph = tf.get_default_graph()
+
+   def _build_model(self):
+
+      l_input = Input( batch_shape=(None, NUM_STATE) )
+      l_dense = Dense(16, activation='relu')(l_input)
+      for i in range(20):
+        l_dense = Dense(16, activation='tanh')(l_dense)
+      for i in range(10):
+        l_dense = Dense(16, activation='tanh')(l_dense)
+
+      out_actions = Dense(NUM_ACTIONS[self.index], activation='softmax')(l_dense)
+      out_value   = Dense(1, activation='linear')(l_dense)
+
+      model = Model(inputs=[l_input], outputs=[out_actions, out_value])
+      model._make_predict_function()	# have to initialize before threading
+
+      return model
+
+   def _build_graph(self, model):
+      s_t = tf.placeholder(tf.float32, shape=(None, NUM_STATE))
+      a_t = tf.placeholder(tf.float32, shape=(None, NUM_ACTIONS[self.index]))
+      r_t = tf.placeholder(tf.float32, shape=(None, 1)) # not immediate, but discounted n step reward
+
+      p, v = model(s_t)
+
+      log_prob = tf.log( tf.reduce_sum(p * a_t, axis=1, keepdims=True) + 1e-10)
+      advantage = r_t - v
+
+      loss_policy = - log_prob * tf.stop_gradient(advantage)									# maximize policy
+      loss_value  = LOSS_V * tf.square(advantage)												# minimize value error
+      entropy = LOSS_ENTROPY * tf.reduce_sum(p * tf.log(p + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
+
+      loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
+
+      optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=.99)
+      minimize = optimizer.minimize(loss_total)
+
+      return s_t, a_t, r_t, minimize
+
+   def optimize(self):
+      if len(self.train_queue[0]) < MIN_BATCH:
+         time.sleep(0)	# yield
+         return
+
+      with self.lock_queue:
+         if len(self.train_queue[0]) < MIN_BATCH:	# more thread could have passed without lock
+            return 									# we can't yield inside lock
+
+         s, a, r, s_, s_mask = self.train_queue
+         self.train_queue = [ [], [], [], [], [] ]
+
+      s = np.vstack(s)
+      a = np.vstack(a)
+      r = np.vstack(r)
+      s_ = np.vstack(s_)
+      s_mask = np.vstack(s_mask)
+
+      if len(s) > 10*MIN_BATCH: print("Optimizer alert! Minimizing batch of %d" % len(s))
+
+      v = self.predict_v(s_)
+      r = r + GAMMA_N * v * s_mask	# set v to 0 where s_ is terminal state
+
+      s_t, a_t, r_t, minimize = self.graph
+      self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
+
+   def train_push(self, s, a, r, s_):
+      with self.lock_queue:
+         self.train_queue[0].append(s)
+         self.train_queue[1].append(a)
+         self.train_queue[2].append(r)
+
+         if s_ is None:
+            self.train_queue[3].append(NONE_STATE)
+            self.train_queue[4].append(0.)
+         else:
+            self.train_queue[3].append(s_)
+            self.train_queue[4].append(1.)
+
+   def predict(self, s):
+      with self.default_graph.as_default():
+         p, v = self.model.predict(s)
+         return p, v
+
+   def predict_p(self, s):
+      with self.default_graph.as_default():
+         p, v = self.model.predict(s)
+         return p
+
+   def predict_v(self, s):
+      with self.default_graph.as_default():
+         p, v = self.model.predict(s)
+         return v
+
+#---------
+
+class Agent(GhostAgent,Agent):
+   def __init__(self,index, eps_start, eps_end, eps_steps,brain,nb_ob=100):
+      self.eps_start = eps_start
+      self.eps_end   = eps_end
+      self.eps_steps = eps_steps
+      self.brain = brain
+      self.index = index
+      self.nb_ob = nb_ob
+      if index:
+        from greedyghost import Greedyghost
+        self.training_ghost = Greedyghost(index)
+      else:
+        from agentghost  import Agentghost
+        self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
+
+
+      self.show = False
+
+      self.memory = []	# used for n_step return
+      self.R = 0.
+      self.frames = 0
+
+      self.prev = None
+
+   def showLearn(self,show=True):
+      self.show = show
+
+   def startLearning(self):
+      self.learn = True
+
+   def stopLearning(self):
+      self.learn = False
+
+   def getDistribution(self, state):
+      # Ghost function
+
+      dist = util.Counter()
+      legalActions = state.getLegalActions(self.index)
+      for a in legalActions:
+          dist[a] = 0
+      dist[self.getAction(state)] = 1
+      dist.normalize()
+      return dist
+
+   def getAction(self, state):
+
+       if not self.show and self.nb_ob:
+            if self.index:
+              dist = self.training_ghost.getDistribution(state)
+              dist.setdefault(0)
+              dist_p = np.zeros(len(DIRECTION))
+              for i,d in enumerate(DIRECTION):
+                dist_p[i] = dist[d]
+              move = np.random.choice(dist_p,p=dist_p)
+              move = DIRECTION[np.argmax(dist_p == move)]
+            else:
+              move = self.training_pacman.getAction(state)
+       else:
+           legalActions = list(map(DIRECTION.index,state.getLegalActions(self.index)))
+
+           if not self.show and np.random.random() < self.getEpsilon():
+             move = DIRECTION[legalActions[np.random.randint(0, len(legalActions))]]
+           else:
+             s = getDataState(state)
+             p = self.brain.predict_p(np.array([s]))[0]
+
+             p = [p[i] if not np.isnan(p[i]) else 0 for i in range(len(p)) if i in legalActions]
+             if sum(p):
+                 p /= sum(p)
+                 move = DIRECTION[np.random.choice(legalActions, p=p)]
+             else:
+                 move = DIRECTION[np.random.choice(legalActions)]
+
+
+       if self.learn:
+         self._saveOneStepTransistion(state,move,False)
+
+       return move
+   def final(self,state):
+        self._saveOneStepTransistion(state,None,True)
+        self.lastMove = 4
+        self.nb_ob = max(0,self.nb_ob-1)
+
+   def _saveOneStepTransistion(self,state,move,final):
+        state_data = tuple(getDataState(state,self.index).tolist())
+        if not self.prev is None:
+
+            if self.index:
+                #ghost reward
+                reward = -util.manhattanDistance(state.getGhostPosition(self.index),
+                                              state.getPacmanPosition()) - \
+                         100000 * state.isWin() + 100000 * state.isLose()
+            else:
+                #pacman reward
+                reward = -1 + 100000 * state.isWin() \
+                        -100000 * state.isLose() + abs(state.getNumFood() - self.prev[0].getNumFood()) * 51 + \
+                        (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
+
+            self.frames += 1
+            self.train(state_data,self.prev[1],reward,self.prev[2])
+
+
+        if not final:
+          move = DIRECTION.index(move)
+          self.lastMove = move
+
+          self.prev = (state.deepCopy(),move,state_data)
+        else:
+          self.prev = None
+
+   def getEpsilon(self):
+      if(self.frames >= self.eps_steps):
+         return self.eps_end
+      else:
+         return self.eps_start + self.frames * (self.eps_end - self.eps_start) / self.eps_steps	# linearly interpolate
+
+
+   def train(self, s, a, r, s_):
+      def get_sample(memory, n):
+         s, a, _, _  = memory[0]
+         _, _, _, s_ = memory[n-1]
+
+         return s, a, self.R, s_
+
+      a_cats = np.zeros(NUM_ACTIONS[self.index])	# turn action into one-hot representation
+      a_cats[a] = 1
+
+      self.memory.append( (s, a_cats, r, s_) )
+
+      self.R = ( self.R + r * GAMMA_N ) / GAMMA
+
+      if s_ is None:
+         while len(self.memory) > 0:
+            n = len(self.memory)
+            s, a, r, s_ = get_sample(self.memory, n)
+            self.brain.train_push(s, a, r, s_)
+
+            self.R = ( self.R - self.memory[0][2] ) / GAMMA
+            self.memory.pop(0)
+
+         self.R = 0
+
+      if len(self.memory) >= N_STEP_RETURN:
+         s, a, r, s_ = get_sample(self.memory, N_STEP_RETURN)
+         self.brain.train_push(s, a, r, s_)
+
+         self.R = self.R - self.memory[0][2]
+         self.memory.pop(0)
+
+   # possible edge case - if an episode ends in <N steps, the computation is incorrect
+
+class Optimizer(threading.Thread):
+    stop_signal = False
+
+    def __init__(self,brain):
+        threading.Thread.__init__(self)
+        self.brain = brain
+
+    def run(self):
+        while not self.stop_signal:
+            self.brain.optimize()
+
+    def stop(self):
+        self.stop_signal = True
+
+#---------
+def runGames(kargs):
+    return pacman.runGames(**kargs)
+#def runGames2(kargs,queue):
+#    queue.put(pacman.runGames(**kargs))
+#
+#def testfunc(q):
+#  print(q)
+#  return
+
+
+def iterativeA3c(nb_ghosts=3,display_mode='graphics',
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
+    global NUM_STATE,NUM_ACTIONS,NONE_STATE
+    tf.reset_default_graph()
+    pool = ThreadPool(nb_cores)
+#    pool = Pool(num_parallel)
+
+    # Choose a display format
+    if display_mode == 'quiet':
+        import textDisplay
+        display = textDisplay.NullGraphics()
+    elif display_mode == 'text':
+        import textDisplay
+        textDisplay.SLEEP_TIME = 0.1
+        display = textDisplay.PacmanGraphics()
+    else:
+        import graphicsDisplay
+        display = graphicsDisplay.PacmanGraphics(1.0, frameTime=0.1)
+
+
+    layout_instance = layout.getLayout(layer)
+    nb_ghosts = min(len(layout_instance.agentPositions)-1,nb_ghosts)
+
+    # Get the length of a state:
+    init_state = pacman.GameState()
+    init_state.initialize(layout_instance, nb_ghosts)
+    NONE_STATE = np.zeros_like(getDataState(init_state))
+    s_size = len(NONE_STATE)
+    NUM_STATE = s_size
+    NUM_ACTIONS = [4 if i else 5 for i in range(0,nb_ghosts+1)]
+
+
+    with tf.Session() as sess:
+        master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
+
+        sess.run(tf.global_variables_initializer())
+        tf.get_default_graph().finalize()
+
+        opts = [[Optimizer(master_networks[i]) for k in range(OPTIMIZERS)] for i in range(0,nb_ghosts+1)]
+
+        for optims in opts:
+            for op in optims:
+              op.start()
+
+        parallel_agents = [[Agent(i, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS,brain=master_networks[i],nb_ob=round_training)
+                                        for i in range(0,nb_ghosts+1)]
+                                        for j in range(num_parallel)]
+
+        main_agents = parallel_agents[0]
+
+        args = [{"layout":layout_instance,
+                 "pacman":parallel_agents[i][0],
+                 "ghosts":parallel_agents[i][1:],
+                 "display":display,
+                 "numGames":1,
+                 "record":False,
+                 "numTraining":1,
+                 "timeout":30} for i in range(num_parallel)]
+        nb_it = 0
+        consec_wins = 0
+#        queue = Queue()
+
+        while nb_it<100 or abs(consec_wins)<50:
+
+            for i in range(nb_ghosts+1):
+                print("Pacman" if not i else "Ghost {}".format(i))
+
+                curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
+                with open('save_scores.txt','a') as f:
+                    f.write('agent '+str(i)+'\n')
+
+                win = False
+                nb_try = 0
+                while not win:
+                    for agents in parallel_agents:
+                        agents[i].startLearning()
+
+                    for j in range(curr_round):
+                        sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
+                        sys.stdout.flush()
+
+
+                        score = sum([game[0].state.data.score for game in pool.map(runGames,args)
+                            if len(game)!=0])
+
+                        with open('save_scores.txt','a') as f:
+                            f.write(str(score)+'\n')
+
+                    for agents in parallel_agents:
+                        agents[i].stopLearning()
+
+
+                    sys.stdout.write("           Final result       \n")
+                    sys.stdout.flush()
+                    main_agents[i].showLearn()
+                    if display_mode != 'quiet' and display_mode != 'text':
+                      games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                    else:
+                      os.makedirs(folder,exist_ok=True)
+                      games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
+                                              fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
+                    main_agents[i].showLearn(False)
+                    # Compute how many consecutive wins ghosts or pacman have
+                    # consec_wins is negative if the ghosts have won, positive otherwise.
+                    # abs(consec_wins) is the number of consecutive wins.
+                    for game in games:
+                        if game.state.isWin():
+                            if not i:
+                              win = True
+                            consec_wins = max(1,consec_wins+1)
+                        else:
+                            if i:
+                              win = True
+                            consec_wins = min(-1,consec_wins-1)
+                    if not win and not main_agents[i].nb_ob:
+                        for agents in parallel_agents:
+                            agents[i].nb_ob = int(curr_round/2)
+                    elif main_agents[i].nb_ob:
+                        print("round_training {}".format(main_agents[i].nb_ob))
+                        win = False
+
+
+
+                    if display_mode != 'quiet' and display_mode != 'text':
+                        makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
+                        graphicsDisplay.FRAME_NUMBER = 0
+                    nb_try += 1
+            nb_it += 1
+
+
+    return master_networks
+
+
+if __name__ == "__main__":
+    mn = iterativeA3c(nb_ghosts=0,display_mode='graphics',
+                 round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='videos',layer='mediumClassic')

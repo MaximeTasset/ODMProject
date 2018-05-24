@@ -6,7 +6,6 @@ Created on Fri Apr  6 17:12:23 2018
 """
 from pacman import Directions
 from game import Agent
-from game import Actions
 
 from ghostAgents import GhostAgent
 from greedyghost import Greedyghost
@@ -18,7 +17,8 @@ import util
 from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 import numpy as np
-from sklearn.base import clone
+#from sklearn.base import clone
+from copy import deepcopy
 import sys
 import tensorflow as tf
 import scipy.signal
@@ -138,13 +138,14 @@ class ReinfAgentFQI(GhostAgent,Agent):
                         -100000 * state.isLose() + abs(state.getNumFood() - self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
-            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],self.prev[3]))
+            possibleMoves = list(map(lambda x:(DIRECTION.index(x),),state.getLegalActions(self.index))) if not final else []
+            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],possibleMoves))
 
         if not final:
           move = DIRECTION.index(move)
           self.lastMove = move
-          possibleMoves = list(map(lambda x:(DIRECTION.index(x),),state.getLegalActions(self.index)))
-          self.prev = (state.deepCopy(),(move,),state_data,possibleMoves)
+
+          self.prev = (state.deepCopy(),(move,),state_data)
         else:
           self.prev = None
 
@@ -331,6 +332,7 @@ class ReinfAgent(GhostAgent,Agent):
 #                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
 
             self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
+
         if len(self.one_step_transistions) == MAX_SIZE or final:
             if not self.round_training:
                 self.diminueEpsilon()
@@ -387,23 +389,21 @@ class ReinfAgent(GhostAgent,Agent):
                 feed_dict=feed_dict)
 
 
-def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=-1),gamma=.999):
+def computeFittedQIteration(samples,mlAlgo,N=400,gamma=.999):
     """
-    " samples = [(state0,action0,reward0,state1,possibleMoveFromState1),...,(stateN,actionN,rewardN,stateN+1,possibleMoveFromStateN+1)]
-    " convergenceTestSet, None = no test set => return None
+    " samples = [(state0,action0,reward0,state0',possibleMoveFromState0'),...,(stateN,actionN,rewardN,stateN',possibleMoveFromStateN')]
+    " mlAlgo = an instance of the jean class
     "
-    " Return: an trained instance of mlAlgo
-    "
-    " Note: this function assumes that an option like 'warm_start' is set to False or that a call to the fit function reset the model.
+    " Return: the training set for the Nth iteration of FQI
     """
     QnLSX = np.array([(s + a) for (s,a,_,_,_) in samples])
     QnLSY = np.array([r for (_,_,r,_,_) in samples])
 
 
-    QN_it = clone(mlAlgo)
+    QN_it = deepcopy(mlAlgo)
 
     # N=1
-    sys.stdout.write("\r \t{}/{}  ".format(n+2,N))
+    sys.stdout.write("\r \t{}/{}  ".format(1,N))
     sys.stdout.flush()
     QN_it.fit(QnLSX,QnLSY)
 
@@ -428,7 +428,7 @@ def computeFittedQIteration(samples,N=400,mlAlgo=ExtraTreesRegressor(n_estimator
       # One big call is much faster than multiple small ones.
       Qn_1 = QN_it.predict(topredict)
       # The recursion is used only when not in a terminal state
-      QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if abs(r) < 1000 else r) for (s0,a0,r,s1,_) in samples])
+      QnLSY = np.array([(gamma * max(Qn_1[index[s0,a0]]) if len(pos) else r) for (s0,a0,r,s1,pos) in samples])
 
       if n != N-2:
           QN_it.fit(QnLSX,QnLSY)

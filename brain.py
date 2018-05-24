@@ -16,6 +16,8 @@ from random import choice
 from time import sleep
 from time import time
 
+from sklearn.ensemble import ExtraTreesRegressor
+
 # Copies one set of variables to another.
 # Used to set worker network parameters to those of global network.
 def update_target_graph(from_scope,to_scope):
@@ -34,6 +36,25 @@ def normalized_columns_initializer(std=1.0):
         out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
         return tf.constant(out)
     return _initializer
+
+class Jean():
+    def __init__(self,nb_move,**kargs):
+        self.regressor = [ExtraTreesRegressor(**kargs) for _ in range(nb_move)]
+
+    def predict(self,X,move=None):
+      if move is None:
+        return [reg.predict(X) for reg in self.regressor]
+      elif isinstance(move,int):
+        return self.regressor[move].predict(X)
+      else:
+        return [reg.predict(X) for reg in self.regressor]
+
+    def fit(X,y):
+      """
+      " X, y two lists of len = 'move'
+      """
+
+
 
 class AC_Network():
     def __init__(self,s_size,a_size,grid_size,scope,trainer,global_scope='global'):

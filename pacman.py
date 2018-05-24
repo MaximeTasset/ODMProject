@@ -804,10 +804,24 @@ def loadAgentCustom(module_name, nographics):
 
 
 def replayGame(layout, actions, display):
-    import pacmanAgents
-    import ghostAgents
+#    import pacmanAgents
+#    import ghostAgents
+        # Choose a display format
+    if display == 'quiet':
+        import textDisplay
+        display = textDisplay.NullGraphics()
+    elif display == 'text':
+        import textDisplay
+        textDisplay.SLEEP_TIME = 0.1
+        display = textDisplay.PacmanGraphics()
+    else:
+        import graphicsDisplay
+        display = graphicsDisplay.PacmanGraphics(1.0, frameTime=0.1)
+
+    from greedyghost import Greedyghost
+    from agentghost  import Agentghost
     rules = ClassicGameRules()
-    agents = [pacmanAgents.GreedyAgent()] + [ghostAgents.RandomGhost(i + 1)
+    agents = [Agentghost()] + [Greedyghost(i + 1)
                                              for i in range(layout.getNumGhosts())]
     game = rules.newGame(layout, agents[0], agents[1:], display)
     state = game.state

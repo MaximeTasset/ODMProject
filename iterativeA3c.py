@@ -43,6 +43,7 @@ def runGames(kargs):
 #  print(q)
 #  return
 
+
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
 
@@ -369,14 +370,14 @@ def test(p):
 
 
 if __name__ == "__main__":
-  l = []
-  p = Process(target=test,args=(l,))
-  p.start()
-  p.join()
-  print(l)
+#  l = []
+#  p = Process(target=test,args=(l,))
+#  p.start()
+#  p.join()
+#  print(l)
 
-#  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
-#               nb_cores=12,folder='FQI')
+  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
+               nb_cores=12,folder='FQI')
 #  master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=6,
 #               nb_cores=12,folder='A3C')
 
