@@ -486,13 +486,22 @@ def getDataState(state,index=0,maxPos=-1,vector=False):
 
     if vector:
       WALL = 0
-      AGENT = 1
-      FOOD = 2
-      CAPS = 3
-      data = np.zeros((walls_pos.width,walls_pos.height,4))
+      PACMAN = 1
+      GHOST = 2
+      FOOD = 3
+      CAPS = 4
+      data = np.zeros((walls_pos.width,walls_pos.height,5))
     else:
       data = np.zeros((walls_pos.width,walls_pos.height))
     foods = []
+    if vector:
+      for i,pos in enumerate(agent_pos):
+          x,y = int(pos[0]),int(pos[1])
+          if i:
+              data[x,y,GHOST] = i
+          else:
+              data[x,y,PACMAN] = 1
+
     for i in range(walls_pos.width):
         for j in range(walls_pos.height):
             if not vector:
@@ -508,9 +517,6 @@ def getDataState(state,index=0,maxPos=-1,vector=False):
                     foods.append((i,j))
                     data[i,j] = 2000
             else:
-                if (i,j) in agent_pos:
-                    index_agent = agent_pos.index((i,j))
-                    data[i,j,AGENT] = index_agent
                 if walls_pos[i][j]:
                     data[i,j,WALL] = 1
                 if food_pos[i][j] and not index:

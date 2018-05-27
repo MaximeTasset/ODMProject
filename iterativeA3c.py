@@ -72,7 +72,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     init_state.initialize(layout_instance, nb_ghosts)
     s_size = len(getDataState(init_state,vector=vector))
     if vector:
-        grid_size = init_state.getWalls().width,init_state.getWalls().height,4
+        grid_size = init_state.getWalls().width,init_state.getWalls().height,5
     else:
         grid_size = init_state.getWalls().width,init_state.getWalls().height
     # Generate global network
