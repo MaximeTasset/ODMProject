@@ -11,7 +11,7 @@
 import numpy as np
 import tensorflow as tf
 
-import time, random, threading,sys,os
+import time, threading,sys,os
 import util
 from pacman import Directions
 from keras.models import *
@@ -72,12 +72,12 @@ class Brain:
       K.manual_variable_initialization(True)
 
       self.index = index
+      with tf.variable_scope(str(self.index)):
+        self.model = self._build_model()
+        self.graph = self._build_graph(self.model)
 
-      self.model = self._build_model()
-      self.graph = self._build_graph(self.model)
 
-
-      self.default_graph = tf.get_default_graph()
+        self.default_graph = tf.get_default_graph()
 
    def _build_model(self):
 
@@ -134,14 +134,14 @@ class Brain:
       r = np.vstack(r)
       s_ = np.vstack(s_)
       s_mask = np.vstack(s_mask)
+      with tf.variable_scope(str(self.index)):
+          if len(s) > 10*MIN_BATCH: print("Optimizer alert! Minimizing batch of %d" % len(s))
 
-      if len(s) > 10*MIN_BATCH: print("Optimizer alert! Minimizing batch of %d" % len(s))
+          v = self.predict_v(s_)
+          r = r + GAMMA_N * v * s_mask	# set v to 0 where s_ is terminal state
 
-      v = self.predict_v(s_)
-      r = r + GAMMA_N * v * s_mask	# set v to 0 where s_ is terminal state
-
-      s_t, a_t, r_t, minimize = self.graph
-      self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
+          s_t, a_t, r_t, minimize = self.graph
+          self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
 
    def train_push(self, s, a, r, s_):
       with self.lock_queue:
@@ -188,7 +188,7 @@ class Agent(GhostAgent,Agent):
         from agentghost  import Agentghost
         self.training_pacman = Agentghost(index=0, time_eater=0, g_pattern=1)
 
-
+      print(self.index == brain.index)
       self.show = False
 
       self.memory = []	# used for n_step return
@@ -273,7 +273,7 @@ class Agent(GhostAgent,Agent):
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             self.frames += 1
-            self.train(state_data,self.prev[1],reward,self.prev[2])
+            self.train(self.prev[2],self.prev[1],reward,state_data if not final else None)
 
 
         if not final:
@@ -381,7 +381,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     NUM_STATE = s_size
     NUM_ACTIONS = [4 if i else 5 for i in range(0,nb_ghosts+1)]
 
-
+    print(NUM_STATE,NUM_ACTIONS,NONE_STATE)
     with tf.Session() as sess:
         master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
 
@@ -393,96 +393,104 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
         for optims in opts:
             for op in optims:
               op.start()
+        try:
+            parallel_agents = [[Agent(index=i, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS,
+                                      brain=master_networks[i],nb_ob=round_training)
+                                            for i in range(0,nb_ghosts+1)]
+                                            for j in range(num_parallel)]
 
-        parallel_agents = [[Agent(i, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS,brain=master_networks[i],nb_ob=round_training)
-                                        for i in range(0,nb_ghosts+1)]
-                                        for j in range(num_parallel)]
+            main_agents = parallel_agents[0]
 
-        main_agents = parallel_agents[0]
+            args = [{"layout":layout_instance,
+                     "pacman":parallel_agents[i][0],
+                     "ghosts":parallel_agents[i][1:],
+                     "display":display,
+                     "numGames":1,
+                     "record":False,
+                     "numTraining":1,
+                     "timeout":30} for i in range(num_parallel)]
+            nb_it = 0
+            consec_wins = 0
+    #        queue = Queue()
 
-        args = [{"layout":layout_instance,
-                 "pacman":parallel_agents[i][0],
-                 "ghosts":parallel_agents[i][1:],
-                 "display":display,
-                 "numGames":1,
-                 "record":False,
-                 "numTraining":1,
-                 "timeout":30} for i in range(num_parallel)]
-        nb_it = 0
-        consec_wins = 0
-#        queue = Queue()
+            while nb_it<100 or abs(consec_wins)<50:
 
-        while nb_it<100 or abs(consec_wins)<50:
+                for i in range(nb_ghosts+1):
+                    print("Pacman" if not i else "Ghost {}".format(i))
 
-            for i in range(nb_ghosts+1):
-                print("Pacman" if not i else "Ghost {}".format(i))
+                    curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
+                    with open('save_scores.txt','a') as f:
+                        f.write('agent '+str(i)+'\n')
 
-                curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
-                with open('save_scores.txt','a') as f:
-                    f.write('agent '+str(i)+'\n')
-
-                win = False
-                nb_try = 0
-                while not win:
-                    for agents in parallel_agents:
-                        agents[i].startLearning()
-
-                    for j in range(curr_round):
-                        sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
-                        sys.stdout.flush()
-
-
-                        score = sum([game[0].state.data.score for game in pool.map(runGames,args)
-                            if len(game)!=0])
-
-                        with open('save_scores.txt','a') as f:
-                            f.write(str(score)+'\n')
-
-                    for agents in parallel_agents:
-                        agents[i].stopLearning()
-
-
-                    sys.stdout.write("           Final result       \n")
-                    sys.stdout.flush()
-                    main_agents[i].showLearn()
-                    if display_mode != 'quiet' and display_mode != 'text':
-                      games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
-                    else:
-                      os.makedirs(folder,exist_ok=True)
-                      games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
-                                              fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
-                    main_agents[i].showLearn(False)
-                    # Compute how many consecutive wins ghosts or pacman have
-                    # consec_wins is negative if the ghosts have won, positive otherwise.
-                    # abs(consec_wins) is the number of consecutive wins.
-                    for game in games:
-                        if game.state.isWin():
-                            if not i:
-                              win = True
-                            consec_wins = max(1,consec_wins+1)
-                        else:
-                            if i:
-                              win = True
-                            consec_wins = min(-1,consec_wins-1)
-                    if not win and not main_agents[i].nb_ob:
+                    win = False
+                    nb_try = 0
+                    while not win:
                         for agents in parallel_agents:
-                            agents[i].nb_ob = int(curr_round/2)
-                    elif main_agents[i].nb_ob:
-                        print("round_training {}".format(main_agents[i].nb_ob))
-                        win = False
+                            agents[i].startLearning()
+
+                        for j in range(curr_round):
+                            sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
+                            sys.stdout.flush()
+
+
+                            score = sum([game[0].state.data.score for game in pool.map(runGames,args)
+                                if len(game)!=0])
+
+                            with open('save_scores.txt','a') as f:
+                                f.write(str(score)+'\n')
+
+                        for agents in parallel_agents:
+                            agents[i].stopLearning()
+
+
+                        sys.stdout.write("           Final result       \n")
+                        sys.stdout.flush()
+                        main_agents[i].showLearn()
+                        if display_mode != 'quiet' and display_mode != 'text':
+                          games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+                        else:
+                          os.makedirs(folder,exist_ok=True)
+                          games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
+                                                  fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
+                        main_agents[i].showLearn(False)
+                        # Compute how many consecutive wins ghosts or pacman have
+                        # consec_wins is negative if the ghosts have won, positive otherwise.
+                        # abs(consec_wins) is the number of consecutive wins.
+                        for game in games:
+                            if game.state.isWin():
+                                if not i:
+                                  win = True
+                                consec_wins = max(1,consec_wins+1)
+                            else:
+                                if i:
+                                  win = True
+                                consec_wins = min(-1,consec_wins-1)
+                        if not win and not main_agents[i].nb_ob:
+                            for agents in parallel_agents:
+                                agents[i].nb_ob = int(curr_round/2)
+                        elif main_agents[i].nb_ob:
+                            print("round_training {}".format(main_agents[i].nb_ob))
+                            win = False
 
 
 
-                    if display_mode != 'quiet' and display_mode != 'text':
-                        makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
-                        graphicsDisplay.FRAME_NUMBER = 0
-                    nb_try += 1
-            nb_it += 1
+                        if display_mode != 'quiet' and display_mode != 'text':
+                            makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
+                            graphicsDisplay.FRAME_NUMBER = 0
+                        nb_try += 1
+                nb_it += 1
+        finally:
+            for optims in opts:
+                for op in optims:
+                    op.stop()
+            for optims in opts:
+                for op in optims:
+                    op.join()
 
 
     return master_networks
 
 
 if __name__ == "__main__":
-    mn = iterativeA3c(nb_ghosts=1,display_mode='quiet',
+    mn = iterativeA3c(nb_ghosts=0,display_mode='quiet',
                  round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='A3Cv2',layer='mediumClassic')

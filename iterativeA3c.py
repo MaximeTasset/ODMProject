@@ -45,7 +45,7 @@ def runGames(kargs):
 
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True):
 
     tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
@@ -70,8 +70,11 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     # Get the length of a state:
     init_state = pacman.GameState()
     init_state.initialize(layout_instance, nb_ghosts)
-    s_size = len(getDataState(init_state))
-    grid_size = init_state.getWalls().width,init_state.getWalls().height
+    s_size = len(getDataState(init_state,vector=vector))
+    if vector:
+        grid_size = init_state.getWalls().width,init_state.getWalls().height,4
+    else:
+        grid_size = init_state.getWalls().width,init_state.getWalls().height
     # Generate global network
     master_networks = [AC_Network(s_size,4 if i else 5,grid_size,"global_"+str(i),None,
                                   global_scope="global_"+str(i))
@@ -86,7 +89,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                                        s_size,4 if i else 5,grid_size,index=i,
                                        name="worker_{}_{}".format(i,j),
                                        global_scope="global_"+str(i),
-                                       round_training=round_training if i else max(round_training,round_training*nb_ghosts))
+                                       round_training=round_training if i else max(round_training,round_training*nb_ghosts),
+                                       vector=vector)
                                         for i in range(0,nb_ghosts+1)]
                                         for j in range(num_parallel)]
 
@@ -375,11 +379,15 @@ if __name__ == "__main__":
 #  p.start()
 #  p.join()
 #  print(l)
-
-  master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
+  if len(sys.argv) == 2 and int(sys.argv[1]):
+    print("FQI")
+    master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
                nb_cores=12,folder='FQI')
-#  master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=6,
-#               nb_cores=12,folder='A3C')
+  else:
+    print("A3C")
+    master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=6,
+               nb_cores=12,folder='A3Cvect',vector=True)
+
 
 #  pool = Pool(4)
 #  b = [[a] for a in range(20)]

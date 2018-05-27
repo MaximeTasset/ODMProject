@@ -139,7 +139,7 @@ class ReinfAgentFQI(GhostAgent,Agent):
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             possibleMoves = list(map(lambda x:(DIRECTION.index(x),),state.getLegalActions(self.index))) if not final else []
-            self.one_step_transistions.append((state_data,self.prev[1],reward,self.prev[2],possibleMoves))
+            self.one_step_transistions.append((self.prev[2],self.prev[1],reward,state_data,possibleMoves))
 
         if not final:
           move = DIRECTION.index(move)
@@ -153,11 +153,13 @@ class ReinfAgent(GhostAgent,Agent):
 
     def __init__(self,optim, global_episodes,sess,s_size,a_size,grid_size, index=0,
                  name="worker",global_scope='global',round_training=5,gamma=0.999,
-                 epsilon=1,min_epsilon=0.01):
+                 epsilon=1,min_epsilon=0.01,vector=False):
 
         self.lastMove = 4
         self.index = index
         self.gamma = gamma
+
+        self.vector = vector
 
         self.learning_algo = None
         self.learn = False
@@ -216,7 +218,7 @@ class ReinfAgent(GhostAgent,Agent):
         with self.sess.as_default(), self.sess.graph.as_default():
 
             legalActions = state.getLegalActions(self.index)
-            s = getDataState(state,self.index)
+            s = getDataState(state,self.index,vector=self.vector)
             # If we learn and epsilon greedy, make random move
             if self.round_training and not self.show:
                 if self.index:
@@ -312,7 +314,7 @@ class ReinfAgent(GhostAgent,Agent):
             self.round_training -= 1
 
     def _saveOneStepTransistion(self,state,move,final,v=None):
-        state_data = getDataState(state,self.index)
+        state_data = getDataState(state,self.index,vector=self.vector)
         if not self.prev is None:
 
 #            possibleMove = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
@@ -331,7 +333,7 @@ class ReinfAgent(GhostAgent,Agent):
 #                    with open(self.name+'.txt','a') as f:
 #                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
 
-            self.one_step_transistions.append([state_data,self.prev[1],reward,self.prev[2],self.prev[3]])
+            self.one_step_transistions.append([self.prev[2],self.prev[1],reward,state_data,self.prev[3]])
 
         if len(self.one_step_transistions) == MAX_SIZE or final:
             if not self.round_training:
@@ -471,7 +473,7 @@ def distanceMap(grid,coord,maxPos=5):
 
   return distance_map
 
-def getDataState(state,index=0,maxPos=5):
+def getDataState(state,index=0,maxPos=-1,vector=False):
     """
     " Returns a tuple whose first elements are the positions of all the agents,
     " and whose other elements contain the flattened food grid.
@@ -482,23 +484,43 @@ def getDataState(state,index=0,maxPos=5):
     walls_pos = state.getWalls()
     caps_pos = state.getCapsules()
 
-    data = np.zeros((walls_pos.width,walls_pos.height))
+    if vector:
+      WALL = 0
+      AGENT = 1
+      FOOD = 2
+      CAPS = 3
+      data = np.zeros((walls_pos.width,walls_pos.height,4))
+    else:
+      data = np.zeros((walls_pos.width,walls_pos.height))
     foods = []
     for i in range(walls_pos.width):
         for j in range(walls_pos.height):
-            if (i,j) in agent_pos:
-                index_agent = agent_pos.index((i,j))
-                data[i,j] = 10000 if not index_agent  else -index_agent*1000
-            elif walls_pos[i][j]:
-                data[i,j] = -10
-            elif food_pos[i][j] and not index:
-                foods.append((i,j))
-                data[i,j] = 2000
-            elif (i,j) in caps_pos and not index:
-                foods.append((i,j))
-                data[i,j] = 2000
+            if not vector:
+                if (i,j) in agent_pos:
+                    index_agent = agent_pos.index((i,j))
+                    data[i,j] = 10000 if not index_agent  else -index_agent*1000
+                elif walls_pos[i][j]:
+                    data[i,j] = -10
+                elif food_pos[i][j] and not index:
+                    foods.append((i,j))
+                    data[i,j] = 2000
+                elif (i,j) in caps_pos and not index:
+                    foods.append((i,j))
+                    data[i,j] = 2000
+            else:
+                if (i,j) in agent_pos:
+                    index_agent = agent_pos.index((i,j))
+                    data[i,j,AGENT] = index_agent
+                if walls_pos[i][j]:
+                    data[i,j,WALL] = 1
+                if food_pos[i][j] and not index:
+                    foods.append((i,j))
+                    data[i,j,FOOD] = 1
+                if (i,j) in caps_pos and not index:
+                    foods.append((i,j))
+                    data[i,j,CAPS] = 1
 
-    if not index:
+    if not index and maxPos != -1:
       dM = distanceMap(data,agent_pos[0],maxPos)
       for i,j in nlargest(len(foods)-maxPos,foods,key=lambda pt: dM[tuple(pt)]):
           data[i,j] = 0

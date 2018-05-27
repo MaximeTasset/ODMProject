@@ -66,7 +66,8 @@ class AC_Network():
 
             #Input and hidden layers
             self.inputs = tf.placeholder(shape=[None,s_size],dtype=tf.float32)
-            self.imageIn = tf.reshape(self.inputs,shape=[-1,grid_size[0],grid_size[1],1])
+
+            self.imageIn = tf.reshape(self.inputs,shape=[-1,grid_size[0],grid_size[1],1 if len(grid_size) == 2 else grid_size[2]])
             self.conv1 = slim.conv2d(activation_fn=tf.nn.tanh,
                 inputs=self.imageIn,num_outputs=81,
                 kernel_size=tuple([9,9]),stride=tuple([1,1]),padding='VALID')

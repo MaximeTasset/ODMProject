@@ -802,11 +802,16 @@ def loadAgentCustom(module_name, nographics):
     mod = __import__(module_name)
     return getattr(mod, module_name.capitalize())
 
+def replay(filename):
+  from pickle import load
+  loaded = load(open(filename,'rb'))
+  loaded["display"] = 'graphics'
+  replayGame(**loaded)
 
 def replayGame(layout, actions, display):
 #    import pacmanAgents
 #    import ghostAgents
-        # Choose a display format
+    # Choose a display format
     if display == 'quiet':
         import textDisplay
         display = textDisplay.NullGraphics()
@@ -821,8 +826,9 @@ def replayGame(layout, actions, display):
     from greedyghost import Greedyghost
     from agentghost  import Agentghost
     rules = ClassicGameRules()
+
     agents = [Agentghost()] + [Greedyghost(i + 1)
-                                             for i in range(layout.getNumGhosts())]
+                                             for i in range(min(len(set([a for a,_ in actions if a])),layout.getNumGhosts()))]
     game = rules.newGame(layout, agents[0], agents[1:], display)
     state = game.state
     display.initialize(state.data)
