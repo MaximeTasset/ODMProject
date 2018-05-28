@@ -419,8 +419,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     print("Pacman" if not i else "Ghost {}".format(i))
 
                     curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
-                    with open('save_scores.txt','a') as f:
-                        f.write('agent '+str(i)+'\n')
+#                    with open('save_scores.txt','a') as f:
+#                        f.write('agent '+str(i)+'\n')
 
                     win = False
                     nb_try = 0
@@ -436,8 +436,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                             score = sum([game[0].state.data.score for game in pool.map(runGames,args)
                                 if len(game)!=0])
 
-                            with open('save_scores.txt','a') as f:
-                                f.write(str(score)+'\n')
+#                            with open('save_scores.txt','a') as f:
+#                                f.write(str(score)+'\n')
 
                         for agents in parallel_agents:
                             agents[i].stopLearning()

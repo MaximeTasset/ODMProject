@@ -11,7 +11,7 @@ import layout
 
 import tensorflow as tf
 from brain import AC_Network
-
+import numpy as np
 import sys
 from multiprocessing.pool import ThreadPool
 from multiprocessing import Pool,Process,Queue
@@ -24,6 +24,8 @@ import gc
 #from sklearn.base import clone
 from copy import deepcopy
 from sklearn.ensemble import ExtraTreesRegressor
+
+from pickle import load
 #GPU = False
 #for d in device_lib.list_local_devices():
 #    if d.device_type == 'GPU':
@@ -45,7 +47,7 @@ def runGames(kargs):
 
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True):
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True,loadFrom='games'):
 
     tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
@@ -96,6 +98,20 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
         sess.run(tf.global_variables_initializer())
         main_agents = parallel_agents[0]
+        agent_folders = [os.path.join(loadFrom,str(i)) for i in range(0,nb_ghosts+1)]
+        agent_counters = np.empty(nb_ghosts+1)
+        for i in range(nb_ghosts+1):
+            agent_counters[i] = len(os.listdir(agent_folders[i]))
+        for i,lim in enumerate(agent_counters):
+            for count in range(int(lim)):
+              try:
+                with open(os.path.join(agent_folders[i],str(count)+'.save'),'rb') as f:
+                    ls = load(f)
+                    final = len(ls)
+                    for j,onestep in enumerate(ls):
+                        main_agents[i].add_transition(onestep,j==(final-1))
+              except FileNotFoundError:
+                pass
 
         args = [{"layout":layout_instance,
                  "pacman":parallel_agents[i][0],
@@ -115,8 +131,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                 print("Pacman" if not i else "Ghost {}".format(i))
 
                 curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
-                with open('save_scores.txt','a') as f:
-                    f.write('agent '+str(i)+'\n')
+#                with open('save_scores.txt','a') as f:
+#                    f.write('agent '+str(i)+'\n')
 
                 win = False
                 nb_try = 0
@@ -146,8 +162,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         score = sum([game[0].state.data.score for game in pool.map(runGames,args)
                             if len(game)!=0])
 
-                        with open('save_scores.txt','a') as f:
-                            f.write(str(score)+'\n')
+#                        with open('save_scores.txt','a') as f:
+#                            f.write(str(score)+'\n')
                         gc.collect()
                     for agents in parallel_agents:
                         agents[i].stopLearning()
@@ -232,8 +248,6 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
 #    main_agents = parallel_agents[0]
 
-
-
     nb_it = 0
     consec_wins = 0
 
@@ -252,8 +266,8 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
             print("Pacman" if not i else "Ghost {}".format(i))
 
             curr_round = rounds if i else max(rounds,factor_pacman*rounds*nb_ghosts)
-            with open('save_scores.txt','a') as f:
-                f.write('agent '+str(i)+'\n')
+#            with open('save_scores.txt','a') as f:
+#                f.write('agent '+str(i)+'\n')
 
             win = False
             nb_try = 0
@@ -281,8 +295,8 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                         scores.append(results[a][0][0].state.data.score)
                         parallel_agents[a] = [results[a][1]["pacman"]]+results[a][1]["ghosts"]
 
-                    with open('save_scores.txt','a') as f:
-                        f.write(str(scores)+ '\t mean: '+ str(sum(scores)/num_parallel)+'\n')
+#                    with open('save_scores.txt','a') as f:
+#                        f.write(str(scores)+ '\t mean: '+ str(sum(scores)/num_parallel)+'\n')
                     gc.collect()
 
                 one_step_transistions = []
@@ -330,7 +344,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                         consec_wins = min(-1,consec_wins-1)
                 if not win and not parallel_agents[0][i].round_training:
                     for agents in parallel_agents:
-                        agents[i].round_training = curr_round/2
+                        agents[i].round_training = 0
                 elif parallel_agents[0][i].round_training:
                     print("round_training {}".format(parallel_agents[0][i].round_training))
                     win = False
@@ -381,12 +395,12 @@ if __name__ == "__main__":
 #  print(l)
   if len(sys.argv) == 2 and int(sys.argv[1]):
     print("FQI")
-    master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=12,
+    master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='graphics',num_parallel=12,
                nb_cores=12,folder='FQI')
   else:
     print("A3C")
-    master_nwk = iterativeA3c(nb_ghosts=1,round_training=800,rounds=200,display_mode='quiet',num_parallel=6,
-               nb_cores=12,folder='A3Cvect',vector=True)
+    master_nwk = iterativeA3c(nb_ghosts=0,round_training=0,rounds=200,display_mode='graphics',num_parallel=6,
+               nb_cores=12,folder='A3Cvectnoghost_no-training',vector=True)
 
 
 #  pool = Pool(4)

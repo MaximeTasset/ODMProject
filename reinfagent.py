@@ -84,7 +84,7 @@ class ReinfAgentFQI(GhostAgent,Agent):
         return dist
 
     def getAction(self, state):
-
+        legal = state.getLegalActions(self.index)
         if (self.round_training and not self.show) or self.learning_algo is None:
             if self.index:
                 dist = self.training_ghost.getDistribution(state)
@@ -97,7 +97,7 @@ class ReinfAgentFQI(GhostAgent,Agent):
             else:
                 move = self.training_pacman.getAction(state)
         else:
-            legalActions = list(map(DIRECTION.index,state.getLegalActions(self.index)))
+            legalActions = list(map(DIRECTION.index,legal))
             state_data = tuple(getDataState(state,self.index).tolist())
             if np.random.uniform() > 0.1:
                 a_dist = self.learning_algo.predict(np.array([state_data+(action,) for action in legalActions]))
@@ -115,6 +115,9 @@ class ReinfAgentFQI(GhostAgent,Agent):
 
 #        legalActions = state.getLegalActions(self.index)
 #        s = getDataState(state)
+        if not move in legal:
+              possibleMoves = list(map(DIRECTION.index,legal))
+              move = DIRECTION[np.random.choice(possibleMoves)]
         if self.learn:
             self._saveOneStepTransistion(state,move,False)
         return move
@@ -122,6 +125,7 @@ class ReinfAgentFQI(GhostAgent,Agent):
     def final(self,state):
         self._saveOneStepTransistion(state,None,True)
         self.lastMove = 4
+        self.round_training -= 1
 
     def _saveOneStepTransistion(self,state,move,final):
         state_data = tuple(getDataState(state,self.index).tolist())
@@ -280,7 +284,9 @@ class ReinfAgent(GhostAgent,Agent):
 #                self.nb_move = 1
 #            else:
 #                self.nb_move += 1
-
+            if not move in legalActions:
+                possibleMoves = list(map(DIRECTION.index,legalActions))
+                move = DIRECTION[np.random.choice(possibleMoves)]
             if self.learn:
                 self._saveOneStepTransistion(state,move,False,v[0,0])
 
@@ -352,6 +358,26 @@ class ReinfAgent(GhostAgent,Agent):
           self.prev = (state.deepCopy(),move,state_data,v)
         else:
           self.prev = None
+    def add_transition(self,transition,final):
+        s = transition[0]
+        a_dist,v,self.rnn_state = self.sess.run([self.local_AC.policy,self.local_AC.value,self.local_AC.state_out],
+                                    feed_dict={self.local_AC.inputs:[s],
+                                    self.local_AC.state_in[0]:self.rnn_state[0],
+                                    self.local_AC.state_in[1]:self.rnn_state[1]})
+        if len(self.one_step_transistions) == MAX_SIZE or final:
+            if final:
+              state_data = transition[-1]
+            else:
+              state_data = s
+            if not self.round_training:
+                self.diminueEpsilon()
+            v1 = self.sess.run(self.local_AC.value,
+                            feed_dict={self.local_AC.inputs:[state_data],
+                            self.local_AC.state_in[0]:self.rnn_state[0],
+                            self.local_AC.state_in[1]:self.rnn_state[1]})[0,0]
+            self.train(self.one_step_transistions,self.sess,self.gamma,v1)
+            self.one_step_transistions = []
+            self.sess.run(self.update_local_ops)
 
     def train(self,rollout,sess,gamma,bootstrap_value):
         with self.sess.as_default(), self.sess.graph.as_default():

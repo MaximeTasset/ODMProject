@@ -71,12 +71,12 @@ class AC_Network():
             self.conv1 = slim.conv2d(activation_fn=tf.nn.tanh,
                 inputs=self.imageIn,num_outputs=81,
                 kernel_size=tuple([9,9]),stride=tuple([1,1]),padding='VALID')
-#            self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
-#                inputs=self.conv1,num_outputs=9,
-#                kernel_size=tuple([3,3]),stride=tuple([1,1]),padding='VALID')
+            self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
+                inputs=self.conv1,num_outputs=9,
+                kernel_size=tuple([3,3]),stride=tuple([1,1]),padding='VALID')
 
 
-            hidden = slim.fully_connected(slim.flatten(self.conv1),100,activation_fn=tf.nn.tanh)
+            hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.tanh)
             #•tf.nn.elu
             for i in range(20):
                 hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.tanh,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
