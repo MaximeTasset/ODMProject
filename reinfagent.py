@@ -302,14 +302,6 @@ class ReinfAgent(GhostAgent,Agent):
     def stopLearning(self):
         self.learn = False
 
-    def learnFromPast(self,used_core=-1):
-        if len(self.one_step_transistions):
-
-            self.learning_algo = computeFittedQIteration(self.one_step_transistions,
-                                                         N=60,
-                                                         mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=used_core))
-            self.one_step_transistions.clear()
-
 
     def final(self,final_state):
 #      with self.sess.as_default(), self.sess.graph.as_default():
@@ -347,7 +339,7 @@ class ReinfAgent(GhostAgent,Agent):
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
-                            self.local_AC.state_in[1]:self.rnn_state[1]})[0,0]
+                            self.local_AC.state_in[1]:self.rnn_state[1]})[0,0] if not final else 0
             self.train(self.one_step_transistions,self.sess,self.gamma,v1)
             self.one_step_transistions = []
             self.sess.run(self.update_local_ops)
@@ -374,8 +366,9 @@ class ReinfAgent(GhostAgent,Agent):
             v1 = self.sess.run(self.local_AC.value,
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
-                            self.local_AC.state_in[1]:self.rnn_state[1]})[0,0]
-            self.train(self.one_step_transistions,self.sess,self.gamma,v1)
+                            self.local_AC.state_in[1]:self.rnn_state[1]})[0,0] if not final else 0
+                            
+            self.train(self.one_step_transistions,self.sess,self.gamma,v1) 
             self.one_step_transistions = []
             self.sess.run(self.update_local_ops)
 

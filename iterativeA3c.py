@@ -117,7 +117,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     ls = load(f)
                     final = len(ls)
                     for j,onestep in enumerate(ls):
-                        main_agents[i].add_transition(onestep,j==(final-1))
+                        main_agents[i].add_transition(onestep[:-1],j==(final-1))
               except FileNotFoundError:
                 pass
             print()
@@ -234,7 +234,7 @@ def runGamesFQI(kargs):
     return (games,kargs)
 
 def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',loadFrom='games',layer='mediumClassic'):
 
     pool = Pool(nb_cores)
 #    pool = Pool(num_parallel)
@@ -257,7 +257,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 
 
     # Generate global network
-    master_networks = [ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores,warm_start=True) for i in range(0,nb_ghosts+1)]
+    master_networks = [ExtraTreesRegressor(n_estimators=10,n_jobs=nb_cores,warm_start=True) for i in range(0,nb_ghosts+1)]
 
     factor_pacman = 2
 
@@ -267,7 +267,44 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                                     for j in range(num_parallel)]
 
 #    main_agents = parallel_agents[0]
+    current_folder = os.path.join(loadFrom,str(nb_ghosts))
+    agent_folders = [os.path.join(current_folder,str(i)) for i in range(0,nb_ghosts+1)]
+    agent_counters = np.empty(nb_ghosts+1)
+    for i in range(nb_ghosts+1):
+      try:
+        agent_counters[i] = len(os.listdir(agent_folders[i]))
+      except FileNotFoundError:
+        agent_counters[i] = 0
+      for i,lim in enumerate(agent_counters):
+        sys.stdout.write("{}\n".format("pacman" if not i else "ghost{}".format(i)))
+        sys.stdout.flush()
+        one_steps = []
+        for count in range(int(lim)):
+          sys.stdout.write("\r{}/{}       ".format(count+1,lim))
+          sys.stdout.flush()
+          try:
+            with open(os.path.join(agent_folders[i],str(count)+'.save'),'rb') as f:
+              ls = load(f)
 
+              for j,onestep in enumerate(ls):
+                one_steps.append(onestep)
+              if len(one_steps) >= 30000:
+                x,y = computeFittedQIteration(one_steps,N=60,
+                                              mlAlgo=ExtraTreesRegressor(n_estimators=10,n_jobs=nb_cores))
+                one_steps = []
+                master_networks[i].n_estimators += 10
+                master_networks[i].fit(x,y)
+          except FileNotFoundError:
+            pass
+        if len(one_steps):
+          x,y = computeFittedQIteration(one_steps,N=60,
+                                              mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
+          master_networks[i].n_estimators += 10
+          master_networks[i].fit(x,y)
+
+        for agents in parallel_agents:
+            agents[i].learning_algo = deepcopy(master_networks[i])
+        print()
     nb_it = 0
     consec_wins = 0
 
@@ -333,8 +370,8 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
 #                    one_step_transistions.append(global_episodes[i].get())
 
                 x,y = computeFittedQIteration(one_step_transistions,N=60,
-                                                   mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
-
+                                                   mlAlgo=ExtraTreesRegressor(n_estimators=10,n_jobs=nb_cores))
+                master_networks[i].n_estimators += 10
                 master_networks[i].fit(x,y)
                 print(len(master_networks[i].estimators_))
                 for agents in parallel_agents:
@@ -413,9 +450,9 @@ if __name__ == "__main__":
 #  p.start()
 #  p.join()
 #  print(l)
-  if len(sys.argv) == 2 and int(sys.argv[1]):
+  if (len(sys.argv) == 2 and int(sys.argv[1]) )or True:
     print("FQI")
-    master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=800,rounds=200,display_mode='graphics',num_parallel=12,
+    master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=0,rounds=50,display_mode='graphics',num_parallel=12,
                nb_cores=12,folder='FQI')
   else:
     print("A3C")

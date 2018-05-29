@@ -101,8 +101,8 @@ class MemAgent(GhostAgent,Agent):
 #                if self.name.endswith("0"):
 #                    with open(self.name+'.txt','a') as f:
 #                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
-
-            self.queue.put((self.index,self.q_index,[self.prev[2],self.prev[1],reward,state_data]))
+            possibleMoves = list(map(lambda x:(DIRECTION.index(x),),state.getLegalActions(self.index))) if not final else []
+            self.queue.put((self.index,self.q_index,[self.prev[2],self.prev[1],reward,state_data,possibleMoves]))
             self.count += 1
 
         if self.count == MAX_SIZE or final:
@@ -232,6 +232,6 @@ def main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='videos',layer
 #            except KeyError:
 #                agent_lists[index][q_index] = [value]
 if __name__ == '__main__':
-    main(nb_ghosts=1,rounds=1200,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
+    main(nb_ghosts=1,rounds=2400,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
 #    main(nb_ghosts=0,rounds=100,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
 #    main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)

@@ -72,50 +72,52 @@ class Brain:
       K.manual_variable_initialization(True)
 
       self.index = index
+
+      self.model = self._build_model()
+      self.graph = self._build_graph(self.model)
+
       with tf.variable_scope(str(self.index)):
-        self.model = self._build_model()
-        self.graph = self._build_graph(self.model)
-
-
         self.default_graph = tf.get_default_graph()
 
    def _build_model(self):
+      with tf.variable_scope(str(self.index)):
+        l_input = Input( batch_shape=(None, NUM_STATE))
 
-      l_input = Input( batch_shape=(None, NUM_STATE) )
-      l_dense = Dense(16, activation='relu')(l_input)
-      for i in range(20):
-        l_dense = Dense(16, activation='tanh')(l_dense)
-      for i in range(10):
-        l_dense = Dense(16, activation='tanh')(l_dense)
+        l_dense = Dense(16, activation='relu')(l_input)
+        for i in range(20):
+          l_dense = Dense(16, activation='tanh')(l_dense)
+        for i in range(10):
+          l_dense = Dense(16, activation='tanh')(l_dense)
 
-      out_actions = Dense(NUM_ACTIONS[self.index], activation='softmax')(l_dense)
-      out_value   = Dense(1, activation='linear')(l_dense)
+        out_actions = Dense(NUM_ACTIONS[self.index], activation='softmax')(l_dense)
+        out_value   = Dense(1, activation='linear')(l_dense)
 
-      model = Model(inputs=[l_input], outputs=[out_actions, out_value])
-      model._make_predict_function()	# have to initialize before threading
+        model = Model(inputs=[l_input], outputs=[out_actions, out_value])
+        model._make_predict_function()	# have to initialize before threading
 
-      return model
+        return model
 
    def _build_graph(self, model):
-      s_t = tf.placeholder(tf.float32, shape=(None, NUM_STATE))
-      a_t = tf.placeholder(tf.float32, shape=(None, NUM_ACTIONS[self.index]))
-      r_t = tf.placeholder(tf.float32, shape=(None, 1)) # not immediate, but discounted n step reward
+      with tf.variable_scope(str(self.index)):
+        s_t = tf.placeholder(tf.float32, shape=(None, NUM_STATE))
+        a_t = tf.placeholder(tf.float32, shape=(None, NUM_ACTIONS[self.index]))
+        r_t = tf.placeholder(tf.float32, shape=(None, 1)) # not immediate, but discounted n step reward
 
-      p, v = model(s_t)
+        p, v = model(s_t)
 
-      log_prob = tf.log( tf.reduce_sum(p * a_t, axis=1, keepdims=True) + 1e-10)
-      advantage = r_t - v
+        log_prob = tf.log( tf.reduce_sum(p * a_t, axis=1, keepdims=True) + 1e-10)
+        advantage = r_t - v
 
-      loss_policy = - log_prob * tf.stop_gradient(advantage)									# maximize policy
-      loss_value  = LOSS_V * tf.square(advantage)												# minimize value error
-      entropy = LOSS_ENTROPY * tf.reduce_sum(p * tf.log(p + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
+        loss_policy = - log_prob * tf.stop_gradient(advantage)						# maximize policy
+        loss_value  = LOSS_V * tf.square(advantage)												# minimize value error
+        entropy = LOSS_ENTROPY * tf.reduce_sum(p * tf.log(p + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
 
-      loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
+        loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
 
-      optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=.99)
-      minimize = optimizer.minimize(loss_total)
+        optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=.99)
+        minimize = optimizer.minimize(loss_total)
 
-      return s_t, a_t, r_t, minimize
+        return s_t, a_t, r_t, minimize
 
    def optimize(self):
       if len(self.train_queue[0]) < MIN_BATCH:
@@ -136,7 +138,7 @@ class Brain:
       s_mask = np.vstack(s_mask)
       with tf.variable_scope(str(self.index)):
           v = self.predict_v(s_)
-          r = r + GAMMA_N * v * s_mask	# set v to 0 where s_ is terminal state
+          r = r + GAMMA_N * v * s_mask
 
           s_t, a_t, r_t, minimize = self.graph
           self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
@@ -217,7 +219,7 @@ class Agent(GhostAgent,Agent):
       return dist
 
    def getAction(self, state):
-
+       legal = state.getLegalActions(self.index)
        if not self.show and self.nb_ob:
             if self.index:
               dist = self.training_ghost.getDistribution(state)
@@ -230,7 +232,7 @@ class Agent(GhostAgent,Agent):
             else:
               move = self.training_pacman.getAction(state)
        else:
-           legalActions = list(map(DIRECTION.index,state.getLegalActions(self.index)))
+           legalActions = list(map(DIRECTION.index,legal))
 
            if not self.show and np.random.random() < self.getEpsilon():
              move = DIRECTION[legalActions[np.random.randint(0, len(legalActions))]]
@@ -245,6 +247,9 @@ class Agent(GhostAgent,Agent):
              else:
                  move = DIRECTION[np.random.choice(legalActions)]
 
+       if not move in legal:
+         legalActions = list(map(DIRECTION.index,legal))
+         move = DIRECTION[np.random.choice(legalActions)]
 
        if self.learn:
          self._saveOneStepTransistion(state,move,False)
@@ -367,7 +372,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
         import graphicsDisplay
         display = graphicsDisplay.PacmanGraphics(1.0, frameTime=0.1)
 
-
     layout_instance = layout.getLayout(layer)
     nb_ghosts = min(len(layout_instance.agentPositions)-1,nb_ghosts)
 
@@ -470,8 +474,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                             print("round_training {}".format(main_agents[i].nb_ob))
                             win = False
 
-
-
                         if display_mode != 'quiet' and display_mode != 'text':
                             makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
                             graphicsDisplay.FRAME_NUMBER = 0
@@ -490,5 +492,5 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
 
 if __name__ == "__main__":
-    mn = iterativeA3c(nb_ghosts=0,display_mode='quiet',
+    mn = iterativeA3c(nb_ghosts=1,display_mode='graphic',
                  round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='A3Cv2',layer='mediumClassic')
