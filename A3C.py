@@ -135,8 +135,6 @@ class Brain:
       s_ = np.vstack(s_)
       s_mask = np.vstack(s_mask)
       with tf.variable_scope(str(self.index)):
-          if len(s) > 10*MIN_BATCH: print("Optimizer alert! Minimizing batch of %d" % len(s))
-
           v = self.predict_v(s_)
           r = r + GAMMA_N * v * s_mask	# set v to 0 where s_ is terminal state
 
@@ -432,9 +430,9 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                             sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
                             sys.stdout.flush()
 
-
-                            score = sum([game[0].state.data.score for game in pool.map(runGames,args)
-                                if len(game)!=0])
+                            games = pool.map(runGames,args)
+#                            score = sum([game[0].state.data.score for game in games
+#                                if len(game)!=0])
 
 #                            with open('save_scores.txt','a') as f:
 #                                f.write(str(score)+'\n')

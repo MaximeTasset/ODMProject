@@ -208,6 +208,8 @@ def main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='videos',layer
 
     player.stop_me()
     player.join()
+
+    pool.close()
 #    os.makedirs(folder,exist_ok=True)
 #    agent_folders = [os.path.join(folder,str(i)) for i in range(0,nb_ghosts+1)]
 #    for f in agent_folders:
@@ -230,6 +232,6 @@ def main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='videos',layer
 #            except KeyError:
 #                agent_lists[index][q_index] = [value]
 if __name__ == '__main__':
-    main(nb_ghosts=1,rounds=600,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
+    main(nb_ghosts=1,rounds=1200,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
 #    main(nb_ghosts=0,rounds=100,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
 #    main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)

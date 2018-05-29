@@ -37,22 +37,22 @@ def normalized_columns_initializer(std=1.0):
         return tf.constant(out)
     return _initializer
 
-class Jean():
-    def __init__(self,nb_move,**kargs):
-        self.regressor = [ExtraTreesRegressor(**kargs) for _ in range(nb_move)]
-
-    def predict(self,X,move=None):
-      if move is None:
-        return [reg.predict(X) for reg in self.regressor]
-      elif isinstance(move,int):
-        return self.regressor[move].predict(X)
-      else:
-        return [reg.predict(X) for reg in self.regressor]
-
-    def fit(X,y):
-      """
-      " X, y two lists of len = 'move'
-      """
+#class Jean():
+#    def __init__(self,nb_move,**kargs):
+#        self.regressor = [ExtraTreesRegressor(**kargs) for _ in range(nb_move)]
+#
+#    def predict(self,X,move=None):
+#      if move is None:
+#        return [reg.predict(X) for reg in self.regressor]
+#      elif isinstance(move,int):
+#        return self.regressor[move].predict(X)
+#      else:
+#        return [reg.predict(X) for reg in self.regressor]
+#
+#    def fit(X,y):
+#      """
+#      " X, y two lists of len = 'move'
+#      """
 
 
 

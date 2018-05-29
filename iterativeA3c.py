@@ -102,9 +102,16 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
         agent_folders = [os.path.join(current_folder,str(i)) for i in range(0,nb_ghosts+1)]
         agent_counters = np.empty(nb_ghosts+1)
         for i in range(nb_ghosts+1):
-            agent_counters[i] = len(os.listdir(agent_folders[i]))
+            try:
+                agent_counters[i] = len(os.listdir(agent_folders[i]))
+            except FileNotFoundError:
+                agent_counters[i] = 0
         for i,lim in enumerate(agent_counters):
+            sys.stdout.write("{}\n".format("pacman" if not i else "ghost{}".format(i)))
+            sys.stdout.flush()
             for count in range(int(lim)):
+              sys.stdout.write("\r{}/{}       ".format(count+1,lim))
+              sys.stdout.flush()
               try:
                 with open(os.path.join(agent_folders[i],str(count)+'.save'),'rb') as f:
                     ls = load(f)
@@ -113,7 +120,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         main_agents[i].add_transition(onestep,j==(final-1))
               except FileNotFoundError:
                 pass
-
+            print()
         args = [{"layout":layout_instance,
                  "pacman":parallel_agents[i][0],
                  "ghosts":parallel_agents[i][1:],
@@ -125,6 +132,20 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
         nb_it = 0
         consec_wins = 0
 #        queue = Queue()
+        for i in range(nb_ghosts+1):
+          main_agents[i].showLearn()
+        if display_mode != 'quiet' and display_mode != 'text':
+          games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+        else:
+          os.makedirs(folder,exist_ok=True)
+          games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
+                                              fname=folder+'/initial.pickle')
+        for i in range(nb_ghosts+1):
+          main_agents[i].showLearn(False)
+
+        if display_mode != 'quiet' and display_mode != 'text':
+          makeGif(folder,'initial.mp4')
+          graphicsDisplay.FRAME_NUMBER = 0
 
         while nb_it<100 or abs(consec_wins)<50:
 
@@ -198,8 +219,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     elif main_agents[i].round_training:
                         print("round_training {}".format(main_agents[i].round_training))
                         win = False
-
-
 
                     if display_mode != 'quiet' and display_mode != 'text':
                         makeGif(folder,'agent_{}_nbrounds_{}_{}.mp4'.format(i,nb_it,nb_try))
@@ -400,8 +419,8 @@ if __name__ == "__main__":
                nb_cores=12,folder='FQI')
   else:
     print("A3C")
-    master_nwk = iterativeA3c(nb_ghosts=0,round_training=0,rounds=200,display_mode='graphics',num_parallel=6,
-               nb_cores=12,folder='A3Cvectnoghost_no-training',vector=True)
+    master_nwk = iterativeA3c(nb_ghosts=1,round_training=0,rounds=200,display_mode='graphics',num_parallel=6,
+               nb_cores=12,folder='A3Cvectnoghost_pretraining2',vector=True)
 
 
 #  pool = Pool(4)

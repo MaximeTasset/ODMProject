@@ -256,7 +256,7 @@ class ReinfAgent(GhostAgent,Agent):
                 #we remove the illegal move from the distribution
                 a_dist = [a if DIRECTION[i] in legalActions else 0 for i,a in enumerate(a_dist[0].tolist())]
                 a_dist = np.array(a_dist)
-
+                a_dist = a_dist / sum(a_dist)
                 #we don't want to go in the opposite direction
 
 
@@ -434,7 +434,6 @@ def computeFittedQIteration(samples,mlAlgo,N=400,gamma=.999):
     sys.stdout.write("\r \t{}/{}  ".format(1,N))
     sys.stdout.flush()
     QN_it.fit(QnLSX,QnLSY)
-
 
     # Creation of the array that will be used for predictions
     i = 0
