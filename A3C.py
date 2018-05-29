@@ -14,8 +14,8 @@ import tensorflow as tf
 import time, threading,sys,os
 import util
 from pacman import Directions
-from keras.models import *
-from keras.layers import *
+#from keras.models import *
+#from keras.layers import *
 from keras import backend as K
 
 import tensorflow.contrib.slim as slim
@@ -27,6 +27,7 @@ from game import Agent
 from ghostAgents import GhostAgent
 from reinfagent import getDataState
 from iterativeA3c import makeGif
+from pickle import load
 
 #-- constants
 ENV = 'CartPole-v0'
@@ -70,10 +71,10 @@ DIRECTION = [ Directions.NORTH,
 BRAIN = None
 
 class Brain:
-   train_queue = [ [], [], [], [], [] ]	# s, a, r, s', s' terminal mask
-   lock_queue = threading.Lock()
 
    def __init__(self,session,index):
+      self.train_queue = [ [], [], [], [], [] ]	# s, a, r, s', s' terminal mask
+      self.lock_queue = threading.Lock()
       self.session = session
       K.set_session(self.session)
       K.manual_variable_initialization(True)
@@ -174,7 +175,12 @@ class Brain:
          self.train_queue = [ [], [], [], [], [] ]
 
       s = np.vstack(s)
-      a = np.vstack(a)
+      try:
+        a = np.vstack(a)
+      except ValueError:
+        with open("wtf.txt","a") as f:
+          f.write(str(a))
+        return
       r = np.vstack(r)
       s_ = np.vstack(s_)
       s_mask = np.vstack(s_mask)
@@ -392,6 +398,7 @@ class Optimizer(threading.Thread):
     def run(self):
         while not self.stop_signal:
             self.brain.optimize()
+            time.sleep(0.1)
 
 
     def stop(self):
@@ -409,7 +416,7 @@ def runGames(kargs):
 
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True):
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True,loadFrom='games'):
     global NUM_STATE,NUM_ACTIONS,NONE_STATE,GRID_SIZE,BRAIN
     tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
@@ -463,6 +470,39 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                                             for j in range(num_parallel)]
 
             main_agents = parallel_agents[0]
+
+            current_folder = os.path.join(loadFrom,str(nb_ghosts))
+            agent_folders = [os.path.join(current_folder,str(i)) for i in range(0,nb_ghosts+1)]
+            agent_counters = np.empty(nb_ghosts+1)
+            for i in range(nb_ghosts+1):
+                try:
+                    agent_counters[i] = len(os.listdir(agent_folders[i]))
+                except FileNotFoundError:
+                    agent_counters[i] = 0
+            c = 0
+            for i,lim in enumerate(agent_counters):
+                sys.stdout.write("{}\n".format("pacman" if not i else "ghost{}".format(i)))
+                sys.stdout.flush()
+                master_networks[i].setLearn(True)
+                for count in range(int(lim)):
+                  sys.stdout.write("\r{}/{}       ".format(count+1,lim))
+                  sys.stdout.flush()
+                  try:
+                    with open(os.path.join(agent_folders[i],str(count)+'.save'),'rb') as f:
+                        ls = load(f)
+                        for j,onestep in enumerate(ls):
+                            s,a,r,s_,p = onestep
+                            main_agents[i].train(s, a, r, s_ if len(p) else None)
+                            c += 1
+                            if c == 100*MIN_BATCH:
+                              c = 0
+                              time.sleep(5)
+                  except FileNotFoundError:
+                    pass
+                master_networks[i].setLearn(False)
+                print()
+
+
 
             args = [{"layout":layout_instance,
                      "pacman":parallel_agents[i][0],

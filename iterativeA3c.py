@@ -115,9 +115,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
               try:
                 with open(os.path.join(agent_folders[i],str(count)+'.save'),'rb') as f:
                     ls = load(f)
-                    final = len(ls)
                     for j,onestep in enumerate(ls):
-                        main_agents[i].add_transition(onestep[:-1],j==(final-1))
+                        main_agents[i].add_transition(onestep[:-1],not len(onestep[-1]))
               except FileNotFoundError:
                 pass
             print()
