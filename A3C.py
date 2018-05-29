@@ -18,6 +18,8 @@ from keras.models import *
 from keras.layers import *
 from keras import backend as K
 
+import tensorflow.contrib.slim as slim
+
 from multiprocessing.pool import ThreadPool
 import pacman
 import layout
@@ -53,6 +55,8 @@ NUM_STATE = None
 NUM_ACTIONS = None
 NONE_STATE = None
 
+GRID_SIZE = None
+
 MAX_SIZE =  30
 
 DIRECTION = [ Directions.NORTH,
@@ -62,6 +66,9 @@ DIRECTION = [ Directions.NORTH,
               Directions.STOP]
 
 #---------
+
+BRAIN = None
+
 class Brain:
    train_queue = [ [], [], [], [], [] ]	# s, a, r, s', s' terminal mask
    lock_queue = threading.Lock()
@@ -79,51 +86,86 @@ class Brain:
       with tf.variable_scope(str(self.index)):
         self.default_graph = tf.get_default_graph()
 
+      self.learn = False
+
+   def setLearn(self,learn):
+     self.learn = learn
+
    def _build_model(self):
       with tf.variable_scope(str(self.index)):
-        l_input = Input( batch_shape=(None, NUM_STATE))
+#        l_input = Input( batch_shape=(None, NUM_STATE))
+#
+#        l_dense = Dense(16, activation='relu')(l_input)
+#        for i in range(20):
+#          l_dense = Dense(16, activation='tanh')(l_dense)
+#        for i in range(10):
+#          l_dense = Dense(16, activation='tanh')(l_dense)
+#
+#        out_actions = Dense(NUM_ACTIONS[self.index], activation='softmax')(l_dense)
+#        out_value   = Dense(1, activation='linear')(l_dense)
+#
+#        model = Model(inputs=[l_input], outputs=[out_actions, out_value])
+#        model._make_predict_function()	# have to initialize before threading
 
-        l_dense = Dense(16, activation='relu')(l_input)
+
+        self.inputs = tf.placeholder(shape=[None,NUM_STATE],dtype=tf.float32)
+
+        self.imageIn = tf.reshape(self.inputs,shape=[-1,GRID_SIZE[0],GRID_SIZE[1],1 if len(GRID_SIZE) == 2 else GRID_SIZE[2]])
+        self.conv1 = slim.conv2d(activation_fn=tf.nn.tanh,
+                inputs=self.imageIn,num_outputs=81,
+                kernel_size=tuple([9,9]),stride=tuple([1,1]),padding='VALID')
+        self.conv2 = slim.conv2d(activation_fn=tf.nn.elu,
+                inputs=self.conv1,num_outputs=9,
+                kernel_size=tuple([3,3]),stride=tuple([1,1]),padding='VALID')
+
+
+        hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.tanh)
         for i in range(20):
-          l_dense = Dense(16, activation='tanh')(l_dense)
-        for i in range(10):
-          l_dense = Dense(16, activation='tanh')(l_dense)
+            hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.tanh,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
 
-        out_actions = Dense(NUM_ACTIONS[self.index], activation='softmax')(l_dense)
-        out_value   = Dense(1, activation='linear')(l_dense)
 
-        model = Model(inputs=[l_input], outputs=[out_actions, out_value])
-        model._make_predict_function()	# have to initialize before threading
+        self.policy = slim.fully_connected(hidden,NUM_ACTIONS[self.index],
+                activation_fn=tf.nn.softmax,
+                weights_initializer=tf.truncated_normal_initializer(0.01),
+                biases_initializer=None)
+        self.value = slim.fully_connected(hidden,1,
+                activation_fn=None,
+                weights_initializer=tf.truncated_normal_initializer(0.01),
+                biases_initializer=None)
 
-        return model
+#        return model
 
    def _build_graph(self, model):
       with tf.variable_scope(str(self.index)):
-        s_t = tf.placeholder(tf.float32, shape=(None, NUM_STATE))
+#        s_t = tf.placeholder(tf.float32, shape=(None, NUM_STATE))
         a_t = tf.placeholder(tf.float32, shape=(None, NUM_ACTIONS[self.index]))
         r_t = tf.placeholder(tf.float32, shape=(None, 1)) # not immediate, but discounted n step reward
 
-        p, v = model(s_t)
+#        p, v = model(s_t)
 
-        log_prob = tf.log( tf.reduce_sum(p * a_t, axis=1, keepdims=True) + 1e-10)
-        advantage = r_t - v
+#        log_prob = tf.log( tf.reduce_sum(p * a_t, axis=1, keepdims=True) + 1e-10)
+        log_prob = tf.log( tf.reduce_sum(self.policy * a_t, axis=1, keepdims=True) + 1e-10)
+        advantage = r_t - self.value#v
 
         loss_policy = - log_prob * tf.stop_gradient(advantage)						# maximize policy
         loss_value  = LOSS_V * tf.square(advantage)												# minimize value error
-        entropy = LOSS_ENTROPY * tf.reduce_sum(p * tf.log(p + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
+#        entropy = LOSS_ENTROPY * tf.reduce_sum(p * tf.log(p + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
+        entropy = LOSS_ENTROPY * tf.reduce_sum(self.policy * tf.log(self.policy + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
 
         loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
 
         optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=.99)
         minimize = optimizer.minimize(loss_total)
-
-        return s_t, a_t, r_t, minimize
+#        print(minimize)
+        return self.inputs, a_t, r_t, minimize
 
    def optimize(self):
+      if not self.learn:
+         time.sleep(1)	# yield
+         return
       if len(self.train_queue[0]) < MIN_BATCH:
          time.sleep(0)	# yield
          return
-
       with self.lock_queue:
          if len(self.train_queue[0]) < MIN_BATCH:	# more thread could have passed without lock
             return 									# we can't yield inside lock
@@ -144,6 +186,10 @@ class Brain:
           self.session.run(minimize, feed_dict={s_t: s, a_t: a, r_t: r})
 
    def train_push(self, s, a, r, s_):
+      if not self.learn:
+         print("wtf")
+         return
+
       with self.lock_queue:
          self.train_queue[0].append(s)
          self.train_queue[1].append(a)
@@ -158,29 +204,33 @@ class Brain:
 
    def predict(self, s):
       with self.default_graph.as_default():
-         p, v = self.model.predict(s)
+#         p, v = self.model.predict(s)
+         p, v = self.session.run([self.policy,self.value],feed_dict={self.inputs:s})
          return p, v
 
    def predict_p(self, s):
       with self.default_graph.as_default():
-         p, v = self.model.predict(s)
+#         p, v = self.model.predict(s)
+         p, v = self.session.run([self.policy,self.value],feed_dict={self.inputs:s})
          return p
 
    def predict_v(self, s):
       with self.default_graph.as_default():
-         p, v = self.model.predict(s)
+#         p, v = self.model.predict(s)
+         p, v = self.session.run([self.policy,self.value],feed_dict={self.inputs:s})
          return v
 
 #---------
 
 class Agent(GhostAgent,Agent):
-   def __init__(self,index, eps_start, eps_end, eps_steps,brain,nb_ob=100):
+   def __init__(self,index, eps_start, eps_end, eps_steps,brain,nb_ob=100,vector=True):
       self.eps_start = eps_start
       self.eps_end   = eps_end
       self.eps_steps = eps_steps
       self.brain = brain
       self.index = index
       self.nb_ob = nb_ob
+      self.vector = vector
       if index:
         from greedyghost import Greedyghost
         self.training_ghost = Greedyghost(index)
@@ -237,8 +287,10 @@ class Agent(GhostAgent,Agent):
            if not self.show and np.random.random() < self.getEpsilon():
              move = DIRECTION[legalActions[np.random.randint(0, len(legalActions))]]
            else:
-             s = getDataState(state)
-             p = self.brain.predict_p(np.array([s]))[0]
+             s = getDataState(state,self.index,vector=self.vector)
+             BRAIN
+             p = BRAIN[self.index].predict_p(np.array([s]))[0]
+#             p = self.brain.predict_p(np.array([s]))[0]
 
              p = [p[i] if not np.isnan(p[i]) else 0 for i in range(len(p)) if i in legalActions]
              if sum(p):
@@ -261,7 +313,7 @@ class Agent(GhostAgent,Agent):
         self.nb_ob = max(0,self.nb_ob-1)
 
    def _saveOneStepTransistion(self,state,move,final):
-        state_data = tuple(getDataState(state,self.index).tolist())
+        state_data = tuple(getDataState(state,self.index,vector=self.vector).tolist())
         if not self.prev is None:
 
             if self.index:
@@ -276,6 +328,7 @@ class Agent(GhostAgent,Agent):
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
 
             self.frames += 1
+
             self.train(self.prev[2],self.prev[1],reward,state_data if not final else None)
 
 
@@ -313,7 +366,7 @@ class Agent(GhostAgent,Agent):
             n = len(self.memory)
             s, a, r, s_ = get_sample(self.memory, n)
             self.brain.train_push(s, a, r, s_)
-
+#            BRAIN[self.index].train_push(s, a, r, s_)
             self.R = ( self.R - self.memory[0][2] ) / GAMMA
             self.memory.pop(0)
 
@@ -323,6 +376,7 @@ class Agent(GhostAgent,Agent):
          s, a, r, s_ = get_sample(self.memory, N_STEP_RETURN)
          self.brain.train_push(s, a, r, s_)
 
+#         BRAIN[self.index].train_push(s, a, r, s_)
          self.R = self.R - self.memory[0][2]
          self.memory.pop(0)
 
@@ -339,6 +393,7 @@ class Optimizer(threading.Thread):
         while not self.stop_signal:
             self.brain.optimize()
 
+
     def stop(self):
         self.stop_signal = True
 
@@ -354,8 +409,8 @@ def runGames(kargs):
 
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
-                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic'):
-    global NUM_STATE,NUM_ACTIONS,NONE_STATE
+                 round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True):
+    global NUM_STATE,NUM_ACTIONS,NONE_STATE,GRID_SIZE,BRAIN
     tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
 #    pool = Pool(num_parallel)
@@ -378,14 +433,20 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     # Get the length of a state:
     init_state = pacman.GameState()
     init_state.initialize(layout_instance, nb_ghosts)
-    NONE_STATE = np.zeros_like(getDataState(init_state))
+    NONE_STATE = np.zeros_like(getDataState(init_state,vector=vector))
     s_size = len(NONE_STATE)
     NUM_STATE = s_size
     NUM_ACTIONS = [4 if i else 5 for i in range(0,nb_ghosts+1)]
 
-    print(NUM_STATE,NUM_ACTIONS,NONE_STATE)
+    if vector:
+        GRID_SIZE = init_state.getWalls().width,init_state.getWalls().height,5
+    else:
+        GRID_SIZE = init_state.getWalls().width,init_state.getWalls().height
+
+
+    print(NUM_STATE,NUM_ACTIONS,GRID_SIZE)
     with tf.Session() as sess:
-        master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
+        BRAIN = master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
 
         sess.run(tf.global_variables_initializer())
         tf.get_default_graph().finalize()
@@ -429,7 +490,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     while not win:
                         for agents in parallel_agents:
                             agents[i].startLearning()
-
+                        master_networks[i].setLearn(True)
                         for j in range(curr_round):
                             sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
                             sys.stdout.flush()
@@ -443,7 +504,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
                         for agents in parallel_agents:
                             agents[i].stopLearning()
-
+                        master_networks[i].setLearn(False)
 
                         sys.stdout.write("           Final result       \n")
                         sys.stdout.flush()

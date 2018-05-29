@@ -4,19 +4,11 @@ Created on Fri Apr 13 16:40:52 2018
 
 @author: Sarah and Maxime
 """
-import threading
-import multiprocessing
+
 import numpy as np
-import matplotlib.pyplot as plt
+
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
-import scipy.signal
-
-from random import choice
-from time import sleep
-from time import time
-
-from sklearn.ensemble import ExtraTreesRegressor
 
 # Copies one set of variables to another.
 # Used to set worker network parameters to those of global network.

@@ -450,7 +450,7 @@ if __name__ == "__main__":
 #  p.start()
 #  p.join()
 #  print(l)
-  if (len(sys.argv) == 2 and int(sys.argv[1]) )or True:
+  if (len(sys.argv) == 2 and int(sys.argv[1]) ):
     print("FQI")
     master_nwk = iterativeA3cFQI(nb_ghosts=1,round_training=0,rounds=50,display_mode='graphics',num_parallel=12,
                nb_cores=12,folder='FQI')
