@@ -98,7 +98,8 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
         sess.run(tf.global_variables_initializer())
         main_agents = parallel_agents[0]
-        agent_folders = [os.path.join(loadFrom,str(i)) for i in range(0,nb_ghosts+1)]
+        current_folder = os.path.join(loadFrom,str(nb_ghosts))
+        agent_folders = [os.path.join(current_folder,str(i)) for i in range(0,nb_ghosts+1)]
         agent_counters = np.empty(nb_ghosts+1)
         for i in range(nb_ghosts+1):
             agent_counters[i] = len(os.listdir(agent_folders[i]))
