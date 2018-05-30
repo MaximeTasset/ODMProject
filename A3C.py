@@ -162,7 +162,6 @@ class Brain:
 
    def optimize(self):
       if not self.learn:
-         time.sleep(1)	# yield
          return
       if len(self.train_queue[0]) < MIN_BATCH:
          time.sleep(0)	# yield
@@ -193,7 +192,6 @@ class Brain:
 
    def train_push(self, s, a, r, s_):
       if not self.learn:
-         print("wtf")
          return
 
       with self.lock_queue:
@@ -294,8 +292,8 @@ class Agent(GhostAgent,Agent):
              move = DIRECTION[legalActions[np.random.randint(0, len(legalActions))]]
            else:
              s = getDataState(state,self.index,vector=self.vector)
-             BRAIN
-             p = BRAIN[self.index].predict_p(np.array([s]))[0]
+
+             p = self.brain.predict_p(np.array([s]))[0]
 #             p = self.brain.predict_p(np.array([s]))[0]
 
              p = [p[i] if not np.isnan(p[i]) else 0 for i in range(len(p)) if i in legalActions]
@@ -398,8 +396,6 @@ class Optimizer(threading.Thread):
     def run(self):
         while not self.stop_signal:
             self.brain.optimize()
-            time.sleep(0.1)
-
 
     def stop(self):
         self.stop_signal = True
@@ -450,7 +446,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     else:
         GRID_SIZE = init_state.getWalls().width,init_state.getWalls().height
 
-
     print(NUM_STATE,NUM_ACTIONS,GRID_SIZE)
     with tf.Session() as sess:
         BRAIN = master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
@@ -476,10 +471,11 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
             agent_counters = np.empty(nb_ghosts+1)
             for i in range(nb_ghosts+1):
                 try:
+                    print(i)
                     agent_counters[i] = len(os.listdir(agent_folders[i]))
                 except FileNotFoundError:
                     agent_counters[i] = 0
-            c = 0
+#            c = 0
             for i,lim in enumerate(agent_counters):
                 sys.stdout.write("{}\n".format("pacman" if not i else "ghost{}".format(i)))
                 sys.stdout.flush()
@@ -493,15 +489,16 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         for j,onestep in enumerate(ls):
                             s,a,r,s_,p = onestep
                             main_agents[i].train(s, a, r, s_ if len(p) else None)
-                            c += 1
-                            if c == 100*MIN_BATCH:
-                              c = 0
-                              time.sleep(5)
+#                            c += 1
+#                            if c == 100*MIN_BATCH:
+#                              c = 0
+#                              time.sleep(5)
                   except FileNotFoundError:
                     pass
                 master_networks[i].setLearn(False)
-                print()
 
+                print()
+                break
 
 
             args = [{"layout":layout_instance,
@@ -516,6 +513,21 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
             consec_wins = 0
     #        queue = Queue()
 
+
+            for i in range(nb_ghosts+1):
+              main_agents[i].showLearn()
+            if display_mode != 'quiet' and display_mode != 'text':
+              games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,False,timeout=30)
+            else:
+              os.makedirs(folder,exist_ok=True)
+              games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
+                                                  fname=folder+'/initial.pickle')
+            for i in range(nb_ghosts+1):
+              main_agents[i].showLearn(False)
+
+            if display_mode != 'quiet' and display_mode != 'text':
+              makeGif(folder,'initial.mp4')
+              graphicsDisplay.FRAME_NUMBER = 0
             while nb_it<100 or abs(consec_wins)<50:
 
                 for i in range(nb_ghosts+1):
@@ -594,4 +606,4 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
 if __name__ == "__main__":
     mn = iterativeA3c(nb_ghosts=1,display_mode='graphic',
-                 round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='A3Cv2',layer='mediumClassic')
+                 round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='A3Cv2_only',layer='mediumClassic')

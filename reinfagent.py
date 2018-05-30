@@ -265,7 +265,7 @@ class ReinfAgent(GhostAgent,Agent):
 
                # with open(self.name+'.txt','a') as f:
               #      f.write("{}:{}:{}:{}\n".format(re,prev,a_dist,self.epsilon))
-                if np.random.uniform() <= self.epsilon:
+                if np.random.uniform() <= self.epsilon and not self.show:
                     if not self.index:
                         a_dist[DIRECTION.index(Directions.REVERSE[DIRECTION[self.lastMove]])] /= 4
 #                        prev = a_dist.copy()
@@ -367,8 +367,8 @@ class ReinfAgent(GhostAgent,Agent):
                             feed_dict={self.local_AC.inputs:[state_data],
                             self.local_AC.state_in[0]:self.rnn_state[0],
                             self.local_AC.state_in[1]:self.rnn_state[1]})[0,0] if not final else 0
-                            
-            self.train(self.one_step_transistions,self.sess,self.gamma,v1) 
+
+            self.train(self.one_step_transistions,self.sess,self.gamma,v1)
             self.one_step_transistions = []
             self.sess.run(self.update_local_ops)
 
@@ -547,6 +547,10 @@ def getDataState(state,index=0,maxPos=-1,vector=False):
     if not index and maxPos != -1:
       dM = distanceMap(data,agent_pos[0],maxPos)
       for i,j in nlargest(len(foods)-maxPos,foods,key=lambda pt: dM[tuple(pt)]):
-          data[i,j] = 0
+          if vector:
+              data[i,j,FOOD] = 0
+              data[i,j,CAPS] = 0
+          else:
+              data[i,j] = 0
     return data.flatten()
 

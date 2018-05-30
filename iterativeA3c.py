@@ -120,6 +120,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
               except FileNotFoundError:
                 pass
             print()
+            break
         args = [{"layout":layout_instance,
                  "pacman":parallel_agents[i][0],
                  "ghosts":parallel_agents[i][1:],
@@ -456,7 +457,7 @@ if __name__ == "__main__":
   else:
     print("A3C")
     master_nwk = iterativeA3c(nb_ghosts=1,round_training=0,rounds=200,display_mode='graphics',num_parallel=6,
-               nb_cores=12,folder='A3Cvectnoghost_pretraining2',vector=True)
+               nb_cores=12,folder='A3Cvectnoghost_pretraining3_only',vector=True)
 
 
 #  pool = Pool(4)
