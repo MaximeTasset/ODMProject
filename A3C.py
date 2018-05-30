@@ -15,7 +15,7 @@ import pacman
 import layout
 from game import Agent
 from ghostAgents import GhostAgent
-from reinfagent import getDataState
+from reinfagent import getDataState,DIRECTION,MAX_SIZE
 from iterativeA3c import makeGif
 from pickle import load
 
@@ -24,10 +24,9 @@ ENV = 'CartPole-v0'
 
 RUN_TIME = 30
 THREADS = 8
-OPTIMIZERS = 3
-THREAD_DELAY = 0.001
+OPTIMIZERS = 4
 
-GAMMA = 0.99
+GAMMA = 0.999
 
 N_STEP_RETURN = 8
 GAMMA_N = GAMMA ** N_STEP_RETURN
@@ -48,17 +47,8 @@ NONE_STATE = None
 
 GRID_SIZE = None
 
-MAX_SIZE =  30
-
-DIRECTION = [ Directions.NORTH,
-              Directions.SOUTH,
-              Directions.EAST,
-              Directions.WEST,
-              Directions.STOP]
 
 #---------
-
-BRAIN = None
 
 class Brain:
 
@@ -129,25 +119,19 @@ class Brain:
         return self.inputs, a_t, r_t, minimize
 
    def optimize(self):
-      if not self.learn:
-         return
       if len(self.train_queue[0]) < MIN_BATCH:
          time.sleep(0)
          return
       with self.lock_queue:
-         if len(self.train_queue[0]) < MIN_BATCH:	# more thread could have passed without lock
-            return 									# we can't yield inside lock
+         #another thread could already have enter in the lock before.
+         if len(self.train_queue[0]) < MIN_BATCH:
+            return
 
          s, a, r, s_, s_mask = self.train_queue
          self.train_queue = [ [], [], [], [], [] ]
 
       s = np.vstack(s)
-      try:
-        a = np.vstack(a)
-      except ValueError:
-        with open("wtf.txt","a") as f:
-          f.write(str(a))
-        return
+      a = np.vstack(a)
       r = np.vstack(r)
       s_ = np.vstack(s_)
       s_mask = np.vstack(s_mask)
@@ -176,21 +160,16 @@ class Brain:
 
    def predict(self, s):
       with self.default_graph.as_default():
-#         p, v = self.model.predict(s)
          p, v = self.session.run([self.policy,self.value],feed_dict={self.inputs:s})
          return p, v
 
    def predict_p(self, s):
       with self.default_graph.as_default():
-#         p, v = self.model.predict(s)
-         p, v = self.session.run([self.policy,self.value],feed_dict={self.inputs:s})
-         return p
+         return self.session.run(self.policy,feed_dict={self.inputs:s})
 
    def predict_v(self, s):
       with self.default_graph.as_default():
-#         p, v = self.model.predict(s)
-         p, v = self.session.run([self.policy,self.value],feed_dict={self.inputs:s})
-         return v
+         return self.session.run(self.value,feed_dict={self.inputs:s})
 
 #---------
 
@@ -213,7 +192,7 @@ class Agent(GhostAgent,Agent):
       print(self.index == brain.index)
       self.show = False
 
-      self.memory = []	# used for n_step return
+      self.batch = []
       self.R = 0.
       self.frames = 0
       self.learn = False
@@ -280,7 +259,6 @@ class Agent(GhostAgent,Agent):
        return move
    def final(self,state):
         self._saveOneStepTransistion(state,None,True)
-        self.lastMove = 4
         self.nb_ob = max(0,self.nb_ob-1)
 
    def _saveOneStepTransistion(self,state,move,final):
@@ -305,7 +283,6 @@ class Agent(GhostAgent,Agent):
 
         if not final:
           move = DIRECTION.index(move)
-          self.lastMove = move
 
           self.prev = (state.deepCopy(),move,state_data)
         else:
@@ -319,49 +296,48 @@ class Agent(GhostAgent,Agent):
 
 
    def train(self, s, a, r, s_):
-      def get_sample(memory, n):
-         s, a, _, _  = memory[0]
-         _, _, _, s_ = memory[n-1]
+      def get_sample(batch, n):
+         s, a, _, _  = batch[0]
+         _, _, _, s_ = batch[n-1]
 
          return s, a, self.R, s_
 
       a_cats = np.zeros(NUM_ACTIONS[self.index])	# turn action into one-hot representation
       a_cats[a] = 1
 
-      self.memory.append( (s, a_cats, r, s_) )
+      self.batch.append( (s, a_cats, r, s_) )
 
       self.R = ( self.R + r * GAMMA_N ) / GAMMA
 
       if s_ is None:
-         while len(self.memory) > 0:
-            n = len(self.memory)
-            s, a, r, s_ = get_sample(self.memory, n)
+         while len(self.batch) > 0:
+            n = len(self.batch)
+            s, a, r, s_ = get_sample(self.batch, n)
             self.brain.train_push(s, a, r, s_)
-#            BRAIN[self.index].train_push(s, a, r, s_)
-            self.R = ( self.R - self.memory[0][2] ) / GAMMA
-            self.memory.pop(0)
+            self.R = ( self.R - self.batch[0][2] ) / GAMMA
+            self.batch.pop(0)
 
          self.R = 0
 
-      if len(self.memory) >= N_STEP_RETURN:
-         s, a, r, s_ = get_sample(self.memory, N_STEP_RETURN)
+      if len(self.batch) >= N_STEP_RETURN:
+         s, a, r, s_ = get_sample(self.batch, N_STEP_RETURN)
          self.brain.train_push(s, a, r, s_)
 
-         self.R = self.R - self.memory[0][2]
-         self.memory.pop(0)
+         self.R = self.R - self.batch[0][2]
+         self.batch.pop(0)
 
-   # possible edge case - if an episode ends in <N steps, the computation is incorrect
 
 class Optimizer(threading.Thread):
     stop_signal = False
 
-    def __init__(self,brain):
+    def __init__(self,brains):
         threading.Thread.__init__(self)
-        self.brain = brain
+        self.brains = brains
 
     def run(self):
         while not self.stop_signal:
-            self.brain.optimize()
+            for brain in self.brains:
+                brain.optimize()
 
     def stop(self):
         self.stop_signal = True
@@ -373,7 +349,7 @@ def runGames(kargs):
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1, folder='videos',layer='mediumClassic',vector=True,loadFrom='games'):
-    global NUM_STATE,NUM_ACTIONS,NONE_STATE,GRID_SIZE,BRAIN
+    global NUM_STATE,NUM_ACTIONS,NONE_STATE,GRID_SIZE
     tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
 
@@ -405,18 +381,17 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     else:
         GRID_SIZE = init_state.getWalls().width,init_state.getWalls().height
 
-    print(NUM_STATE,NUM_ACTIONS,GRID_SIZE)
     with tf.Session() as sess:
-        BRAIN = master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
+
+        master_networks = [Brain(sess,i) for i in range(0,nb_ghosts+1)]
 
         sess.run(tf.global_variables_initializer())
         tf.get_default_graph().finalize()
 
-        opts = [[Optimizer(master_networks[i]) for k in range(OPTIMIZERS)] for i in range(0,nb_ghosts+1)]
+        opts = [Optimizer(master_networks) for k in range(OPTIMIZERS)]
 
-        for optims in opts:
-            for op in optims:
-              op.start()
+        for op in opts:
+          op.start()
         try:
             parallel_agents = [[Agent(index=i, eps_start=EPS_START, eps_end=EPS_STOP, eps_steps=EPS_STEPS,
                                       brain=master_networks[i],nb_ob=round_training)
@@ -434,7 +409,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     agent_counters[i] = len(os.listdir(agent_folders[i]))
                 except FileNotFoundError:
                     agent_counters[i] = 0
-#            c = 0
+            c = 0
             for i,lim in enumerate(agent_counters):
                 sys.stdout.write("{}\n".format("pacman" if not i else "ghost{}".format(i)))
                 sys.stdout.flush()
@@ -448,16 +423,17 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         for j,onestep in enumerate(ls):
                             s,a,r,s_,p = onestep
                             main_agents[i].train(s, a, r, s_ if len(p) else None)
-#                            c += 1
-#                            if c == 100*MIN_BATCH:
-#                              c = 0
-#                              time.sleep(5)
+                            c += 1
+                            # To avoid the queue overflow (otherwise it may
+                            # lead to crash)
+                            if c == 10*MIN_BATCH:
+                              c = 0
+                              time.sleep(5)
                   except FileNotFoundError:
                     pass
                 master_networks[i].setLearn(False)
 
                 print()
-                break
 
 
             args = [{"layout":layout_instance,
@@ -470,8 +446,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                      "timeout":30} for i in range(num_parallel)]
             nb_it = 0
             consec_wins = 0
-    #        queue = Queue()
-
 
             for i in range(nb_ghosts+1):
               main_agents[i].showLearn()
@@ -493,8 +467,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                     print("Pacman" if not i else "Ghost {}".format(i))
 
                     curr_round = rounds if i else max(rounds,2*rounds*nb_ghosts)
-#                    with open('save_scores.txt','a') as f:
-#                        f.write('agent '+str(i)+'\n')
 
                     win = False
                     nb_try = 0
@@ -503,21 +475,16 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                             agents[i].startLearning()
                         master_networks[i].setLearn(True)
                         for j in range(curr_round):
-                            sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
+                            sys.stdout.write("\r{}/{}       ".format(j+1,curr_round))
                             sys.stdout.flush()
 
                             games = pool.map(runGames,args)
-#                            score = sum([game[0].state.data.score for game in games
-#                                if len(game)!=0])
-
-#                            with open('save_scores.txt','a') as f:
-#                                f.write(str(score)+'\n')
 
                         for agents in parallel_agents:
                             agents[i].stopLearning()
                         master_networks[i].setLearn(False)
 
-                        sys.stdout.write("           Final result       \n")
+                        sys.stdout.write("Final result       \n")
                         sys.stdout.flush()
                         main_agents[i].showLearn()
                         if display_mode != 'quiet' and display_mode != 'text':
@@ -527,6 +494,7 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                           games = pacman.runGames(layout_instance,main_agents[0],main_agents[1:],display,1,True,timeout=30,
                                                   fname=folder+'/agent_{}_nbrounds_{}_{}.pickle'.format(i,nb_it,nb_try))
                         main_agents[i].showLearn(False)
+
                         # Compute how many consecutive wins ghosts or pacman have
                         # consec_wins is negative if the ghosts have won, positive otherwise.
                         # abs(consec_wins) is the number of consecutive wins.
@@ -552,12 +520,10 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
                         nb_try += 1
                 nb_it += 1
         finally:
-            for optims in opts:
-                for op in optims:
-                    op.stop()
-            for optims in opts:
-                for op in optims:
-                    op.join()
+            for op in opts:
+                op.stop()
+            for op in opts:
+                op.join()
 
 
     return master_networks

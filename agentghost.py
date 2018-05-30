@@ -57,6 +57,7 @@ class Agentghost(Agent):
         self.graph = None
         self.known = {}
 
+
     def getAction(self, state):
         """
         Parameters:
@@ -68,161 +69,165 @@ class Agentghost(Agent):
         -------
         - A legal move as defined game.Directions.
         """
-        if self.start is None:
-            self.start = tuple(
-                state.data.agentStates[0].start.getPosition())
+        try:
+            if self.start is None:
+                self.start = tuple(
+                    state.data.agentStates[0].start.getPosition())
 
-        direction = state.data.agentStates[0].getDirection()
-        pos = tuple(state.getPacmanPosition())
-        if self.graph is None or (
-                direction == Directions.STOP and pos == self.start):
-            self.reset()
-            self.graph = Graph(state)
-            ch = self.graph.mean_choices
-            if ch <= 2.3:
-                mult = 1.
-            elif ch > 2.3 and ch <= 3:
-                mult = 0.75
+            direction = state.data.agentStates[0].getDirection()
+            pos = tuple(state.getPacmanPosition())
+            if self.graph is None or (direction == Directions.STOP and pos == self.start):
+                self.reset()
+                self.graph = Graph(state)
+                ch = self.graph.mean_choices
+                if ch <= 2.3:
+                    mult = 1.
+                elif ch > 2.3 and ch <= 3:
+                    mult = 0.75
+                else:
+                    mult = 0.5
+                if self.g_pattern >= 2:
+                    self.depth = int(5 * mult)
+                elif self.g_pattern == 0:
+                    self.depth = int(8 * mult)
+                else:
+                    self.depth = int(8 * mult)
+
             else:
-                mult = 0.5
-            if self.g_pattern >= 2:
-                self.depth = int(5 * mult)
-            elif self.g_pattern == 0:
-                self.depth = int(8 * mult)
-            else:
-                self.depth = int(8 * mult)
+                self.graph.update_graph(state)
 
-        else:
-            self.graph.update_graph(state)
+            ret = Directions.STOP
 
-        ret = Directions.STOP
+            nodes_list = self.graph.nodes_list
+            nodes_array = self.graph.nodes_array
+            # start node is the node where pacman is positioned
+            start = nodes_array[self.graph.posX][self.graph.posY]
 
-        nodes_list = self.graph.nodes_list
-        nodes_array = self.graph.nodes_array
-        # start node is the node where pacman is positioned
-        start = nodes_array[self.graph.posX][self.graph.posY]
+            if len(self.moves) == 0:
 
-        if len(self.moves) == 0:
+                # this method tries to go to the closest node from pacman
+                distance = sys.maxsize
+                end2 = None
+                for node in nodes_list:
+                    if node.has_food and node is not start and self.graph.dist(
+                            node) < distance:
+                        distance = self.graph.dist(node)
+                        end2 = node
 
-            # this method tries to go to the closest node from pacman
-            distance = sys.maxsize
-            end2 = None
-            for node in nodes_list:
-                if node.has_food and node is not start and self.graph.dist(
-                        node) < distance:
-                    distance = self.graph.dist(node)
-                    end2 = node
+                middle = end2
+                if middle is not None:
+                    # look for a path to end node. It ends early if it finds food
+                    # closer than the end node
+                    self.problem = SearchProblemData(nodes_list, start, middle)
+                    self.goal = middle
+                    path, path_nodes = astar(self.problem, aStarHeuristic)
+                    # path = dfs(problem)
+                    if path is not None:
+                        self.moves = path
+                        self.moves_nodes = path_nodes
 
-            middle = end2
-            if middle is not None:
-                # look for a path to end node. It ends early if it finds food
-                # closer than the end node
-                self.problem = SearchProblemData(nodes_list, start, middle)
-                self.goal = middle
-                path, path_nodes = astar(self.problem, aStarHeuristic)
-                # path = dfs(problem)
-                if path is not None:
-                    self.moves = path
-                    self.moves_nodes = path_nodes
-
-        # get ghost info
-        ghosts = state.getGhostStates()
-        pos = []
-        if self.g_patterns_prob is None and len(ghosts):
-            self.g_patterns_prob = np.zeros((len(ghosts), 3))
-            if self.g_pattern == 3:
-                self.g_patterns_prob[:, :] = 1. / 3
-            else:
-                self.g_patterns_prob[:, self.g_pattern] = 1.
-        else:
-            pass
-
-        for i, ghost in enumerate(ghosts):
-            realx, realy = ghost.getPosition()
-            x, y = int(realx), int(realy)
-            if not ghost.scaredTimer and self.g_pattern == 3 \
-                    and i in self.g_pattern_predict:
-                for pattern in self.g_pattern_predict[i]:
-                    p_moves = self.g_pattern_predict[i][pattern]
-                    if (x, y) in p_moves:
-                        prob = p_moves[(x, y)]
-                        if not self.allSame:
-                            self.g_patterns_prob[i, pattern] *= prob
-                        else:
-                            self.g_patterns_prob[:, pattern] *= prob
-                    else:
-                        if not self.allSame:
-                            self.g_patterns_prob[i, pattern] = 0
-                        else:
-                            self.g_patterns_prob[:, pattern] = 0
-                del self.g_pattern_predict[i]
-
-        for i, ghost in enumerate(ghosts):
-            realx, realy = ghost.getPosition()
-            x, y = int(realx), int(realy)
-            try:
-                p_prob = self.g_patterns_prob[i, :] / \
-                    sum(self.g_patterns_prob[i, :])
-                self.g_patterns_prob[i, :] = p_prob[:]
-            except BaseException:
-                p_prob = np.zeros(3)
-                p_prob[:] = self.g_patterns_prob[i, :] = 1. / 3
-
-            for p, prob in enumerate(p_prob):
-                if prob > 0.92:
-                    self.g_patterns_prob[i, :] = 0
-                    self.g_patterns_prob[i, p] = 1
-                    break
-
-            facing = ghost.getDirection()
-            b = int(x) != realx or int(y) != realy
-            pos.append(
-                (int(x),
-                 int(y),
-                    facing,
-                    (ghost.scaredTimer,
-                     b),
-                    ghost.start.pos,
-                    tuple(p_prob)))
-        # do minimax if there are ghosts close enough
-        doMinMax = False
-        cell = self.graph.nodes_array[self.graph.posX][self.graph.posY]
-        for coord in pos:
-            x, y, _, _, _, _ = coord
-            ghost_node = nodes_array[x][y]
-            if dist(start, ghost_node) < self.depth:
-                doMinMax = True
-
-        if doMinMax:
-            minmax = ExpectMiniMax(
-                self.graph,
-                start,
-                self.goal,
-                self.g_pattern,
-                self.moves_nodes,
-                self.depth)
-            # update class and do expectminimax
-            _, moves = minmax.expect(start, self.depth, True, pos)
-            move = moves[len(moves) - 1]
-            if move != self.moves[0]:
-                self.moves = []
-                self.moves_nodes = []
+            # get ghost info
+            ghosts = state.getGhostStates()
+            pos = []
+            if self.g_patterns_prob is None and len(ghosts):
+                self.g_patterns_prob = np.zeros((len(ghosts), 3))
                 if self.g_pattern == 3:
-                    self.predict_ghost(move, pos)
+                    self.g_patterns_prob[:, :] = 1. / 3
+                else:
+                    self.g_patterns_prob[:, self.g_pattern] = 1.
+            else:
+                pass
 
-                negb_cell = cell.getNeighborByDirection(move)
-                if self.graph.nb_food == 1 and negb_cell.has_food:
-                    self.reset()
-                return move
+            for i, ghost in enumerate(ghosts):
+                realx, realy = ghost.getPosition()
+                x, y = int(realx), int(realy)
+                if not ghost.scaredTimer and self.g_pattern == 3 \
+                        and i in self.g_pattern_predict:
+                    for pattern in self.g_pattern_predict[i]:
+                        p_moves = self.g_pattern_predict[i][pattern]
+                        if (x, y) in p_moves:
+                            prob = p_moves[(x, y)]
+                            if not self.allSame:
+                                self.g_patterns_prob[i, pattern] *= prob
+                            else:
+                                self.g_patterns_prob[:, pattern] *= prob
+                        else:
+                            if not self.allSame:
+                                self.g_patterns_prob[i, pattern] = 0
+                            else:
+                                self.g_patterns_prob[:, pattern] = 0
+                    del self.g_pattern_predict[i]
 
-        ret = self.moves[0]
-        del self.moves[0]
-        del self.moves_nodes[0]
-        if self.g_pattern == 3:
-            self.predict_ghost(ret, pos)
-        negb_cell = cell.getNeighborByDirection(ret)
-        if self.graph.nb_food == 1 and negb_cell.has_food:
+            for i, ghost in enumerate(ghosts):
+                realx, realy = ghost.getPosition()
+                x, y = int(realx), int(realy)
+                try:
+                    p_prob = self.g_patterns_prob[i, :] / \
+                        sum(self.g_patterns_prob[i, :])
+                    self.g_patterns_prob[i, :] = p_prob[:]
+                except BaseException:
+                    p_prob = np.zeros(3)
+                    p_prob[:] = self.g_patterns_prob[i, :] = 1. / 3
+
+                for p, prob in enumerate(p_prob):
+                    if prob > 0.92:
+                        self.g_patterns_prob[i, :] = 0
+                        self.g_patterns_prob[i, p] = 1
+                        break
+
+                facing = ghost.getDirection()
+                b = int(x) != realx or int(y) != realy
+                pos.append(
+                    (int(x),
+                     int(y),
+                        facing,
+                        (ghost.scaredTimer,
+                         b),
+                        ghost.start.pos,
+                        tuple(p_prob)))
+            # do minimax if there are ghosts close enough
+            doMinMax = False
+            cell = self.graph.nodes_array[self.graph.posX][self.graph.posY]
+            for coord in pos:
+                x, y, _, _, _, _ = coord
+                ghost_node = nodes_array[x][y]
+                if dist(start, ghost_node) < self.depth:
+                    doMinMax = True
+
+            if doMinMax:
+                minmax = ExpectMiniMax(
+                    self.graph,
+                    start,
+                    self.goal,
+                    self.g_pattern,
+                    self.moves_nodes,
+                    self.depth)
+                # update class and do expectminimax
+                _, moves = minmax.expect(start, self.depth, True, pos)
+                move = moves[len(moves) - 1]
+                if move != self.moves[0]:
+                    self.moves = []
+                    self.moves_nodes = []
+                    if self.g_pattern == 3:
+                        self.predict_ghost(move, pos)
+
+                    negb_cell = cell.getNeighborByDirection(move)
+                    if self.graph.nb_food == 1 and negb_cell.has_food:
+                        self.reset()
+                    return move
+
+            ret = self.moves[0]
+            del self.moves[0]
+            del self.moves_nodes[0]
+            if self.g_pattern == 3:
+                self.predict_ghost(ret, pos)
+            negb_cell = cell.getNeighborByDirection(ret)
+            if self.graph.nb_food == 1 and negb_cell.has_food:
+                self.reset()
+
+        except (IndexError,AttributeError):
             self.reset()
+            raise IndexError
         return ret
 
     def predict_ghost(self, move, g_pos):

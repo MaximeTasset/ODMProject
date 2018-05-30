@@ -20,7 +20,7 @@ from game import Agent
 import numpy as np
 
 from threading import Thread
-from multiprocessing import Queue, Process,Pool,Manager
+from multiprocessing import Pool,Manager
 from multiprocessing.queues import Empty
 
 import os
@@ -68,8 +68,12 @@ class MemAgent(GhostAgent,Agent):
       else:
           legal = state.getLegalActions(self.index)
           if self.epsilon > np.random.uniform():
-            move = self.training_pacman.getAction(state)
-            if not move in legal:
+            try:
+              move = self.training_pacman.getAction(state)
+              if not move in legal:
+                possibleMoves = list(map(DIRECTION.index,legal))
+                move = DIRECTION[np.random.choice(possibleMoves)]
+            except IndexError:
               possibleMoves = list(map(DIRECTION.index,legal))
               move = DIRECTION[np.random.choice(possibleMoves)]
           else:
@@ -86,8 +90,6 @@ class MemAgent(GhostAgent,Agent):
         state_data = getDataState(state,self.index,vector=self.vector)
         if not self.prev is None:
 
-#            possibleMove = list(map(Actions.directionToVector,state.getLegalActions(self.index)))
-
             if self.index:
                 #ghost reward
                 reward = -util.manhattanDistance(state.getGhostPosition(self.index),
@@ -98,9 +100,7 @@ class MemAgent(GhostAgent,Agent):
                 reward = -1 + 100000 * state.isWin() \
                         -100000 * state.isLose() + abs(state.getNumFood() - self.prev[0].getNumFood()) * 51 + \
                         (state.getPacmanPosition() in self.prev[0].getCapsules()) * 101
-#                if self.name.endswith("0"):
-#                    with open(self.name+'.txt','a') as f:
-#                        f.write('from {} to {}: {}\n'.format(state.getPacmanPosition(),self.prev[0].getPacmanPosition(),reward))
+
             possibleMoves = list(map(lambda x:(DIRECTION.index(x),),state.getLegalActions(self.index))) if not final else []
             self.queue.put((self.index,self.q_index,[self.prev[2],self.prev[1],reward,state_data,possibleMoves]))
             self.count += 1
@@ -232,6 +232,6 @@ def main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='videos',layer
 #            except KeyError:
 #                agent_lists[index][q_index] = [value]
 if __name__ == '__main__':
-    main(nb_ghosts=1,rounds=2400,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
+    main(nb_ghosts=0,rounds=2400,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
 #    main(nb_ghosts=0,rounds=100,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
 #    main(nb_ghosts=3,rounds=100,num_parallel=4,nb_cores=4, folder='games',layer='mediumClassic',vector=True,epsilon=.2)
