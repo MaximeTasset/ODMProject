@@ -71,7 +71,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
         sys.stdout.flush()
         one_steps = []
         for count in range(int(lim)):
-          sys.stdout.write("\r{}/{}       ".format(count+1,lim))
+          sys.stdout.write("\r{}/{}      ".format(count+1,lim))
           sys.stdout.flush()
           try:
             with open(os.path.join(agent_folders[i],str(count)+'.save'),'rb') as f:
@@ -89,7 +89,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
             pass
         if len(one_steps):
           x,y = computeFittedQIteration(one_steps,N=60,
-                                              mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
+                                        mlAlgo=ExtraTreesRegressor(n_estimators=100,n_jobs=nb_cores))
           master_networks[i].n_estimators += 10
           master_networks[i].fit(x,y)
 
@@ -113,7 +113,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                     agents[i].startLearning()
 
                 for j in range(curr_round):
-                    sys.stdout.write("\r                {}/{}       ".format(j+1,curr_round))
+                    sys.stdout.write("\r{}/{}       ".format(j+1,curr_round))
                     sys.stdout.flush()
 
                     args = [{"layout":layout_instance,
@@ -149,7 +149,7 @@ def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
                 for agents in parallel_agents:
                     agents[i].learning_algo = deepcopy(master_networks[i])
 
-                sys.stdout.write("           Final result       \n")
+                sys.stdout.write("Final result\n")
                 sys.stdout.flush()
                 parallel_agents[0][i].showLearn()
                 if display_mode != 'quiet' and display_mode != 'text':
