@@ -6,7 +6,6 @@ Created on Fri Apr 13 16:40:52 2018
 """
 
 import numpy as np
-
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 

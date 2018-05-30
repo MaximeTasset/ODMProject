@@ -1,25 +1,15 @@
-# OpenGym CartPole-v0 with A3C on GPU
-# -----------------------------------
-#
-# A3C implementation with GPU optimizer threads.
-#
-# Made as part of blog series Let's make an A3C, available at
-# https://jaromiru.com/2017/02/16/lets-make-an-a3c-theory/
-#
-# author: Jaromir Janisch, 2017
+"""
+Created on Fri Apr  6 17:12:23 2018
 
+@author: Sarah and Maxime
+"""
 import numpy as np
 import tensorflow as tf
-
 import time, threading,sys,os
 import util
 from pacman import Directions
-#from keras.models import *
-#from keras.layers import *
 from keras import backend as K
-
 import tensorflow.contrib.slim as slim
-
 from multiprocessing.pool import ThreadPool
 import pacman
 import layout
@@ -73,16 +63,17 @@ BRAIN = None
 class Brain:
 
    def __init__(self,session,index):
-      self.train_queue = [ [], [], [], [], [] ]	# s, a, r, s', s' terminal mask
+      # train_queue contains 5 queues, which contain respectively:
+      # s, a, r, s', s' terminal mask:
+      self.train_queue = [ [], [], [], [], [] ]
       self.lock_queue = threading.Lock()
       self.session = session
       K.set_session(self.session)
       K.manual_variable_initialization(True)
 
       self.index = index
-
-      self.model = self._build_model()
-      self.graph = self._build_graph(self.model)
+      self.make_model()
+      self.graph = self.make_optimizer_graph()
 
       with tf.variable_scope(str(self.index)):
         self.default_graph = tf.get_default_graph()
@@ -92,22 +83,8 @@ class Brain:
    def setLearn(self,learn):
      self.learn = learn
 
-   def _build_model(self):
+   def make_model(self):
       with tf.variable_scope(str(self.index)):
-#        l_input = Input( batch_shape=(None, NUM_STATE))
-#
-#        l_dense = Dense(16, activation='relu')(l_input)
-#        for i in range(20):
-#          l_dense = Dense(16, activation='tanh')(l_dense)
-#        for i in range(10):
-#          l_dense = Dense(16, activation='tanh')(l_dense)
-#
-#        out_actions = Dense(NUM_ACTIONS[self.index], activation='softmax')(l_dense)
-#        out_value   = Dense(1, activation='linear')(l_dense)
-#
-#        model = Model(inputs=[l_input], outputs=[out_actions, out_value])
-#        model._make_predict_function()	# have to initialize before threading
-
 
         self.inputs = tf.placeholder(shape=[None,NUM_STATE],dtype=tf.float32)
 
@@ -119,11 +96,9 @@ class Brain:
                 inputs=self.conv1,num_outputs=9,
                 kernel_size=tuple([3,3]),stride=tuple([1,1]),padding='VALID')
 
-
         hidden = slim.fully_connected(slim.flatten(self.conv2),100,activation_fn=tf.nn.tanh)
         for i in range(20):
             hidden = slim.fully_connected(hidden,100,activation_fn=tf.nn.tanh,weights_initializer=tf.truncated_normal_initializer(stddev=0.01))
-
 
         self.policy = slim.fully_connected(hidden,NUM_ACTIONS[self.index],
                 activation_fn=tf.nn.softmax,
@@ -134,37 +109,30 @@ class Brain:
                 weights_initializer=tf.truncated_normal_initializer(0.01),
                 biases_initializer=None)
 
-#        return model
-
-   def _build_graph(self, model):
+   def make_optimizer_graph(self):
       with tf.variable_scope(str(self.index)):
-#        s_t = tf.placeholder(tf.float32, shape=(None, NUM_STATE))
         a_t = tf.placeholder(tf.float32, shape=(None, NUM_ACTIONS[self.index]))
-        r_t = tf.placeholder(tf.float32, shape=(None, 1)) # not immediate, but discounted n step reward
+        r_t = tf.placeholder(tf.float32, shape=(None, 1))
 
-#        p, v = model(s_t)
-
-#        log_prob = tf.log( tf.reduce_sum(p * a_t, axis=1, keepdims=True) + 1e-10)
         log_prob = tf.log( tf.reduce_sum(self.policy * a_t, axis=1, keepdims=True) + 1e-10)
-        advantage = r_t - self.value#v
+        advantage = r_t - self.value
 
-        loss_policy = - log_prob * tf.stop_gradient(advantage)						# maximize policy
-        loss_value  = LOSS_V * tf.square(advantage)												# minimize value error
-#        entropy = LOSS_ENTROPY * tf.reduce_sum(p * tf.log(p + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
-        entropy = LOSS_ENTROPY * tf.reduce_sum(self.policy * tf.log(self.policy + 1e-10), axis=1, keepdims=True)	# maximize entropy (regularization)
+        loss_policy = - log_prob * tf.stop_gradient(advantage)
+        loss_value  = LOSS_V * tf.square(advantage)
+        entropy = LOSS_ENTROPY * tf.reduce_sum(self.policy * tf.log(self.policy + 1e-10),
+                                               axis=1, keepdims=True)
 
         loss_total = tf.reduce_mean(loss_policy + loss_value + entropy)
 
         optimizer = tf.train.RMSPropOptimizer(LEARNING_RATE, decay=.99)
         minimize = optimizer.minimize(loss_total)
-#        print(minimize)
         return self.inputs, a_t, r_t, minimize
 
    def optimize(self):
       if not self.learn:
          return
       if len(self.train_queue[0]) < MIN_BATCH:
-         time.sleep(0)	# yield
+         time.sleep(0)
          return
       with self.lock_queue:
          if len(self.train_queue[0]) < MIN_BATCH:	# more thread could have passed without lock
@@ -294,7 +262,6 @@ class Agent(GhostAgent,Agent):
              s = getDataState(state,self.index,vector=self.vector)
 
              p = self.brain.predict_p(np.array([s]))[0]
-#             p = self.brain.predict_p(np.array([s]))[0]
 
              p = [p[i] if not np.isnan(p[i]) else 0 for i in range(len(p)) if i in legalActions]
              if sum(p):
@@ -380,7 +347,6 @@ class Agent(GhostAgent,Agent):
          s, a, r, s_ = get_sample(self.memory, N_STEP_RETURN)
          self.brain.train_push(s, a, r, s_)
 
-#         BRAIN[self.index].train_push(s, a, r, s_)
          self.R = self.R - self.memory[0][2]
          self.memory.pop(0)
 
@@ -400,15 +366,9 @@ class Optimizer(threading.Thread):
     def stop(self):
         self.stop_signal = True
 
-#---------
 def runGames(kargs):
     return pacman.runGames(**kargs)
-#def runGames2(kargs,queue):
-#    queue.put(pacman.runGames(**kargs))
-#
-#def testfunc(q):
-#  print(q)
-#  return
+
 
 
 def iterativeA3c(nb_ghosts=3,display_mode='graphics',
@@ -416,7 +376,6 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
     global NUM_STATE,NUM_ACTIONS,NONE_STATE,GRID_SIZE,BRAIN
     tf.reset_default_graph()
     pool = ThreadPool(nb_cores)
-#    pool = Pool(num_parallel)
 
     # Choose a display format
     if display_mode == 'quiet':
