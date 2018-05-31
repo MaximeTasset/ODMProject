@@ -6,10 +6,8 @@ Created on Fri Apr  6 17:38:41 2018
 @author: Sarah and Maxime
 """
 import pacman
-from reinfagent import ReinfAgent,ReinfAgentFQI,getDataState,computeFittedQIteration
+from reinfagent import ReinfAgentFQI,computeFittedQIteration
 import layout
-import tensorflow as tf
-from brain import AC_Network
 import numpy as np
 import sys
 from multiprocessing.pool import ThreadPool

@@ -7,8 +7,8 @@ import numpy as np
 import tensorflow as tf
 import time, threading,sys,os
 import util
-from pacman import Directions
-from keras import backend as K
+#
+#from keras import backend as K
 import tensorflow.contrib.slim as slim
 from multiprocessing.pool import ThreadPool
 import pacman
@@ -20,9 +20,6 @@ from iterativeA3c import makeGif
 from pickle import load
 
 #-- constants
-ENV = 'CartPole-v0'
-
-RUN_TIME = 30
 THREADS = 8
 OPTIMIZERS = 4
 
@@ -31,11 +28,11 @@ GAMMA = 0.999
 N_STEP_RETURN = 8
 GAMMA_N = GAMMA ** N_STEP_RETURN
 
-EPS_START = 0.4
+EPS_START = 0.6
 EPS_STOP  = .15
-EPS_STEPS = 75000
+EPS_STEPS = 7500000
 
-MIN_BATCH = 32
+MIN_BATCH = MAX_SIZE
 LEARNING_RATE = 1e-6
 
 LOSS_V = .5			# v loss coefficient
@@ -58,8 +55,8 @@ class Brain:
       self.train_queue = [ [], [], [], [], [] ]
       self.lock_queue = threading.Lock()
       self.session = session
-      K.set_session(self.session)
-      K.manual_variable_initialization(True)
+#      K.set_session(self.session)
+#      K.manual_variable_initialization(True)
 
       self.index = index
       self.make_model()
@@ -530,5 +527,5 @@ def iterativeA3c(nb_ghosts=3,display_mode='graphics',
 
 
 if __name__ == "__main__":
-    mn = iterativeA3c(nb_ghosts=1,display_mode='graphic',
+    mn = iterativeA3c(nb_ghosts=0,display_mode='graphic',
                  round_training=200,rounds=200,num_parallel=4,nb_cores=4, folder='A3Cv2_only',layer='mediumClassic')
