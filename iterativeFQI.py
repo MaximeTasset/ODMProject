@@ -24,7 +24,7 @@ def runGamesFQI(kargs):
     games = pacman.runGames(**kargs)
     return (games,kargs)
 
-def iterativeA3cFQI(nb_ghosts=3,display_mode='graphics',
+def iterativeFQI(nb_ghosts=3,display_mode='graphics',
                  round_training=5,rounds=100,num_parallel=1,nb_cores=-1,
                  folder='videos',loadFrom='games',layer='mediumClassic'):
 
